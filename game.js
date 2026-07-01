@@ -75,6 +75,35 @@
     },
   };
 
+  /* ---------------- 排行榜 (按完成度: 已掌握词数/总词数) ----------------
+     现为本地存档(同一浏览器多个名字才会有多条)。已预留 _syncRemote 钩子:
+     配好 Firebase Realtime DB 后在该处 push 即可变成跨设备(Kahoot式)共享榜。 */
+  const NAME_KEY = SAVE_KEY + '_name';
+  const BOARD_KEY = SAVE_KEY + '_board';
+  const Board = {
+    name() { try { return localStorage.getItem(NAME_KEY) || ''; } catch (e) { return ''; } },
+    setName(n) { try { localStorage.setItem(NAME_KEY, (n || '').slice(0, 16)); } catch (e) {} },
+    load() { try { return JSON.parse(localStorage.getItem(BOARD_KEY) || '[]'); } catch (e) { return []; } },
+    save(a) { try { localStorage.setItem(BOARD_KEY, JSON.stringify(a)); } catch (e) {} },
+    // 完成度: 全部 CS 词里已掌握的比例
+    myStats() {
+      const list = window.CS_WORDS || [];
+      let m = 0; for (const w of list) { if (Progress.mastery(w.term) === 'mastered') m++; }
+      const total = list.length; return { mastered: m, total, pct: total ? Math.round(m / total * 100) : 0 };
+    },
+    updateSelf() {
+      const name = this.name(); if (!name) return null;
+      const s = this.myStats();
+      const arr = this.load();
+      const entry = { name, mastered: s.mastered, total: s.total, pct: s.pct, ts: Date.now() };
+      const i = arr.findIndex(e => e.name === name);
+      if (i >= 0) arr[i] = entry; else arr.push(entry);
+      this.save(arr); this._syncRemote(entry); return entry;
+    },
+    ranked() { return this.load().slice().sort((a, b) => b.pct - a.pct || b.mastered - a.mastered || a.ts - b.ts); },
+    _syncRemote(/* entry */) { /* Firebase-ready: 配置后在此把 entry push 到 Realtime DB, 拉取合并成跨设备榜 */ },
+  };
+
   /* ---------------- 工具 ---------------- */
   const shuffle = (a) => { const b = a.slice(); for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b; };
   const pct = (c, t) => (t ? Math.round(c / t * 100) : 0);
@@ -215,6 +244,7 @@
           <div class="cg-menu-top">
             <div class="cg-logo"><span class="cg-logo-mark">&lt;/&gt;</span> CS 术语对战</div>
             <div class="cg-tagline">CIE 9618 · 先背单词卡, 再英中对照打 Boss</div>
+            <button class="cg-player" data-ref="player">${Board.name() ? '🎮 ' + esc(Board.name()) + ' · 改名' : '✎ 设置玩家名'}</button>
           </div>
 
           <div class="cg-level-tabs">
@@ -236,6 +266,7 @@
           <div class="cg-menu-actions">
             <button class="cg-btn" data-ref="play">开始学习 + 对战 ▶</button>
             <div class="cg-mini-row">
+              <button class="cg-btn ghost sm" data-ref="board">🏆 排行榜</button>
               <button class="cg-btn ghost sm" data-ref="mute">${SFX.isMuted() ? '🔇 静音' : '🔊 音效'}</button>
               <button class="cg-btn ghost sm" data-ref="reset">重置进度</button>
             </div>
@@ -246,9 +277,50 @@
       this.root.appendChild(view);
       view.querySelectorAll('[data-level]').forEach(b => b.addEventListener('click', () => { SFX.click(); this.level = b.dataset.level; this.topic = 'ALL'; this.showMenu(); }));
       view.querySelectorAll('[data-topic]').forEach(b => b.addEventListener('click', () => { SFX.click(); this.topic = b.dataset.topic; this.showMenu(); }));
-      view.querySelector('[data-ref="play"]').addEventListener('click', () => { SFX.click(); this.startRound(); });
+      view.querySelector('[data-ref="play"]').addEventListener('click', () => { SFX.click(); this.ensureName(); this.startRound(); });
+      view.querySelector('[data-ref="player"]').addEventListener('click', () => { SFX.click(); this.ensureName(true); this.showMenu(); });
+      view.querySelector('[data-ref="board"]').addEventListener('click', () => { SFX.click(); this.showBoard(); });
       view.querySelector('[data-ref="reset"]').addEventListener('click', () => { if (confirm('确定清空所有掌握度进度吗？')) { Progress.save({}); this.showMenu(); } });
       view.querySelector('[data-ref="mute"]').addEventListener('click', (e) => { SFX.toggle(); e.currentTarget.textContent = SFX.isMuted() ? '🔇 静音' : '🔊 音效'; });
+    },
+
+    ensureName(force) {
+      const cur = Board.name();
+      if (cur && !force) return cur;
+      const v = window.prompt('输入你的玩家名（排行榜显示，最多 16 字）:', cur || '');
+      if (v && v.trim()) { Board.setName(v.trim()); Board.updateSelf(); return v.trim(); }
+      return cur;
+    },
+
+    /* ---------------- 排行榜屏 ---------------- */
+    showBoard() {
+      this._clear();
+      const me = Board.name();
+      const rows = Board.ranked();
+      const my = Board.myStats();
+      const list = rows.length ? rows.map((e, i) => {
+        const medal = ['🥇', '🥈', '🥉'][i] || `<span class="cg-bd-rank">${i + 1}</span>`;
+        const self = e.name === me ? ' me' : '';
+        return `<div class="cg-bd-row${self}">
+          <div class="cg-bd-pos">${medal}</div>
+          <div class="cg-bd-name">${esc(e.name)}${self ? ' <em>(你)</em>' : ''}</div>
+          <div class="cg-bd-bar"><div class="cg-bd-fill" style="width:${e.pct}%"></div></div>
+          <div class="cg-bd-pct">${e.pct}%<small>${e.mastered}/${e.total}</small></div>
+        </div>`;
+      }).join('') : '<div class="cg-bd-empty">还没有记录。设置玩家名、打几局掌握单词就上榜啦。</div>';
+      const view = el(`
+        <div class="cg-screen cg-board">
+          <div class="cg-board-top">
+            <button class="cg-back" data-ref="back">← 返回</button>
+            <div class="cg-board-title">🏆 完成度排行榜</div>
+            <span></span>
+          </div>
+          <div class="cg-board-sub">按 <b>已掌握词数 / 总词数</b> 排名${me ? ` · 你: ${esc(me)} ${my.pct}%` : ' · 未设玩家名'}</div>
+          <div class="cg-board-list">${list}</div>
+          <div class="cg-hint">目前是本机排行榜。要和同学跨设备比拼(Kahoot 式)，配一个 Firebase 就能开共享榜。</div>
+        </div>`);
+      this.root.appendChild(view);
+      view.querySelector('[data-ref="back"]').addEventListener('click', () => { SFX.click(); this.showMenu(); });
     },
 
     /* ---------------- 开一轮: 选词 → 学习 → 对战 ---------------- */
@@ -256,7 +328,7 @@
       const pool = this.wordsFor(this.level, this.topic);
       if (pool.length < 4) { alert('该关卡词数不足 4, 无法出四选一。'); return; }
       // 本轮词量: 6~12
-      const count = Math.min(12, Math.max(6, pool.length));
+      const count = Math.min(7, Math.max(5, pool.length));   // 每轮 5~7 个词(×掌握考法), 一局不拖太长
       const roundWords = preWords && preWords.length ? preWords : weightedPick(pool, Math.min(count, pool.length));
       const boss = BOSS_ROSTER[Math.floor(Math.random() * BOSS_ROSTER.length)];
       this.showLearn(roundWords, pool, boss);
@@ -356,6 +428,7 @@
     /* ---------------- 结算 / 错题复盘 (按词去重, 重点显示例句) ---------------- */
     showResult(data, roundWords, pool, boss) {
       this._clear();
+      Board.updateSelf();                          // 打完一局刷新排行榜完成度
       const { answered, correct, maxCombo, total } = data;
       const win = data.win !== false;              // 缺省视为胜利(兼容)
       const mastered = data.mastered != null ? data.mastered : total;
@@ -433,6 +506,7 @@
             ${hasWrongs ? '<button class="cg-btn" data-ref="redo">重练错词 🔁</button>' : ''}
             <div class="cg-mini-row">
               <button class="cg-btn ${hasWrongs ? 'ghost' : ''}" data-ref="again">${win ? '再来一轮 ⚔' : '整关重来 ⚔'}</button>
+              <button class="cg-btn ghost" data-ref="board">🏆 排行榜</button>
               <button class="cg-btn ghost" data-ref="menu">返回选关</button>
             </div>
           </div>
@@ -446,6 +520,7 @@
         this.showBattle(wrongWords, pool, boss);   // 重练错词(直接对战, 仍走掌握制)
       });
       view.querySelector('[data-ref="again"]').addEventListener('click', () => { SFX.click(); this.startRound(); });
+      view.querySelector('[data-ref="board"]').addEventListener('click', () => { SFX.click(); this.showBoard(); });
       view.querySelector('[data-ref="menu"]').addEventListener('click', () => { SFX.click(); this.showMenu(); });
     },
   };
@@ -603,10 +678,12 @@
       for (const s of unmastered) min = Math.min(min, s.seen);
       const cands = shuffle(unmastered.filter(s => s.seen === min));
       const state = cands[0];
-      // 挑考法: 该词还没答对过的形式优先; 都答对过(不足门槛时)则随机换一个
-      const notPassed = shuffle(state.forms.filter(f => !state.passed.has(f)));
-      const form = notPassed.length ? notPassed[0]
-        : shuffle(state.forms.slice())[0];
+      // 挑考法: 有例句填空(cloze)且还没考过则优先出填空(多点填空题); 否则未考过的优先, 都考过则随机
+      const notPassed = state.forms.filter(f => !state.passed.has(f));
+      let form;
+      if (notPassed.includes('cloze')) form = 'cloze';
+      else if (notPassed.length) form = shuffle(notPassed)[0];
+      else form = shuffle(state.forms.slice())[0];
       return { state, form };
     }
 
