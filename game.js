@@ -162,7 +162,7 @@
 
   // 强干扰项: 优先同 topic、其次同 level, 最后全库兜底; 按目标字段去重
   function pickDistractors(word, pool, field, n) {
-    const val = (w) => field === 'cn' ? cnOf(w) : w.term;
+    const val = (w) => field === 'cn' ? cnOf(w) : field === 'definition' ? defOf(w) : w.term;
     const target = val(word);
     const sameTopic = shuffle(pool.filter(x => x.term !== word.term && x.topic === word.topic));
     const other = shuffle(pool.filter(x => x.term !== word.term && x.topic !== word.topic));
@@ -180,14 +180,17 @@
     return sentence.replace(re, '_____');
   }
 
-  // 该词可用的考法(form)。总有 term2cn / cn2term; 例句能挖空则再加 cloze
+  // 英文解释(定义): 优先 definition, 缺失时兜底(不报错)。对战只用英文, 中文只在学习卡出现。
+  const defOf = (w) => (w && w.definition) ? w.definition : (w ? (w.cn_def || w.cn || '') : '');
+
+  // 该词可用的考法(form): 英文术语↔英文解释 互选; 例句能挖空则再加 cloze
   function formsFor(word) {
-    const forms = ['term2cn', 'cn2term'];
+    const forms = ['term2def', 'def2term'];
     if (clozeSentence(word.example, word.term)) forms.push('cloze');
     return forms;
   }
 
-  // 造一道题。form: 'term2cn'(英->中) | 'cn2term'(中->英) | 'cloze'(例句填空->选术语)
+  // 造一道题。form: 'term2def'(英词->选英文解释) | 'def2term'(英文解释->选英词) | 'cloze'(例句填空->选术语)
   function buildQuestion(word, pool, form) {
     if (form === 'cloze') {
       const blanked = clozeSentence(word.example, word.term);
@@ -197,21 +200,21 @@
         return { form, kind: 'cloze', big: blanked, bigClass: 'cloze', dirLabel: '例句填空 → 选正确术语填入 _____',
           options, correctIdx: options.indexOf(word.term), word };
       }
-      // 挖不到空: 回退英中对照
-      form = 'cn2term';
+      form = 'def2term';   // 挖不到空: 回退英文解释->选词
     }
-    if (form === 'cn2term') {
+    if (form === 'def2term') {
+      // 英文解释 → 选英文术语
       const wrong = pickDistractors(word, pool, 'term', 3).map(w => w.term);
       const options = shuffle([word.term, ...wrong]);
-      return { form: 'cn2term', kind: 'ec', big: cnOf(word), bigClass: 'cn', dirLabel: '中文释义 → 选英文术语',
+      return { form: 'def2term', kind: 'ee', big: defOf(word), bigClass: 'def', dirLabel: '英文解释 → 选英文术语',
         options, correctIdx: options.indexOf(word.term), word };
     }
-    // term2cn: 英文术语 → 选正确中文释义
-    const wrong = pickDistractors(word, pool, 'cn', 3).map(w => cnOf(w));
-    const cn = cnOf(word);
-    const options = shuffle([cn, ...wrong]);
-    return { form: 'term2cn', kind: 'ec', big: word.term, bigClass: 'en', dirLabel: '英文术语 → 选中文释义',
-      options, correctIdx: options.indexOf(cn), word };
+    // term2def: 英文术语 → 选正确英文解释
+    const wrong = pickDistractors(word, pool, 'definition', 3).map(w => defOf(w));
+    const def = defOf(word);
+    const options = shuffle([def, ...wrong]);
+    return { form: 'term2def', kind: 'ee', big: word.term, bigClass: 'en', dirLabel: '英文术语 → 选英文解释',
+      options, correctIdx: options.indexOf(def), word };
   }
 
   /* ============================================================
@@ -515,7 +518,7 @@
       }
       const groups = Array.from(byTerm.values());
       const perfect = win && groups.length === 0;   // 只有胜利且零错才叫完美
-      const formName = { term2cn: '英→中', cn2term: '中→英', cloze: '例句填空' };
+      const formName = { term2def: '词→释义', def2term: '释义→词', cloze: '例句填空' };
 
       // 错题复盘条目(设计: term + phon + cn + 🔊, cn_def, ex_en, "✗你选" / "✓正确")
       const body = groups.map(g => {
@@ -820,13 +823,10 @@
       // 大题卡: 中文/英文/填空 三态字体
       this.ref.qbig.textContent = this.curQ.big;
       this.ref.qbig.className = 'big ' + (this.curQ.kind === 'cloze' ? 'cloze' : this.curQ.bigClass);
-      // 副行(sub): 英中对照题给出该词的中文详细解释帮助理解; 填空题不显示
+      // 副行(sub): 对战纯英文, 不显示中文提示(中文只在学习卡)。留空隐藏。
       if (this.ref.qsub) {
-        const w = this.curQ.word;
-        let sub = '';
-        if (this.curQ.kind !== 'cloze') sub = (this.curQ.bigClass === 'cn') ? (w.definition || '') : (cnDefOf(w) || '');
-        this.ref.qsub.textContent = sub;
-        this.ref.qsub.style.display = sub ? '' : 'none';
+        this.ref.qsub.textContent = '';
+        this.ref.qsub.style.display = 'none';
       }
       this._renderProgress();
       this._renderOptions();

@@ -331,6 +331,8 @@ body.cg-body{
 .cg-qcard .big{font-family:var(--font-cn);font-size:26px;font-weight:700;color:#fff;line-height:1.4;word-break:break-word;}
 .cg-qcard .big.en{font-family:var(--font-pixel);font-size:22px;font-weight:400;letter-spacing:1px;line-height:1.5;}
 .cg-qcard .big.cloze{font-family:var(--font-cn);font-size:20px;font-weight:600;font-style:italic;color:#a9eaff;line-height:1.5;}
+/* 英文解释题(def2term): 英文句子, 可读字号 */
+.cg-qcard .big.def{font-family:var(--font-cn);font-size:20px;font-weight:600;line-height:1.5;color:#eaf0ff;}
 .cg-qcard .sub{font-size:14px;color:#c7cbf5;margin-top:6px;font-family:var(--font-cn);}
 .cg-qcard .ex{font-size:15px;color:#a9eaff;margin-top:10px;font-style:italic;font-family:var(--font-cn);}
 
