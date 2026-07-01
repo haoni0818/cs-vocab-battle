@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0d1122">
+  <title>CS 术语对战 · CIE 9618 背单词</title>
+  <link rel="stylesheet" href="game.css">
+</head>
+<body class="cg-body">
+  <div id="cg-root"></div>
+
+  <!-- 词库先加载, 再加载引擎 -->
+  <script src="words_cs.js"></script>
+  <script src="game.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      window.CSVocabGame.init(document.getElementById('cg-root'));
+    });
+  </script>
+</body>
+</html>
