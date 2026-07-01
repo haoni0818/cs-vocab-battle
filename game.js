@@ -167,11 +167,12 @@
      Boss 花名册 (纯抽象概念, 无角色美术)
      ============================================================ */
   const BOSS_ROSTER = [
-    { name: 'The Null Core', sub: '空引用之核', face: '∅', taunts: ['你的引用……指向虚无！', 'NullPointerException 找上你了。'] },
-    { name: 'Stack Overflower', sub: '爆栈巨兽', face: '≣', taunts: ['递归太深，你会崩溃的！', '栈已满，无路可退。'] },
-    { name: 'The Deadlock', sub: '死锁之环', face: '⊗', taunts: ['谁也拿不到锁——包括你！', '资源被我全部占用了。'] },
-    { name: 'Infinite Loop', sub: '无限循环', face: '∞', taunts: ['while(true) 永不停歇！', '你找不到我的终止条件。'] },
+    { name: 'The Null Core', sub: '空引用之核', face: '∅', img: 'assets/boss_null.png', taunts: ['你的引用……指向虚无！', 'NullPointerException 找上你了。'] },
+    { name: 'Stack Overflower', sub: '爆栈巨兽', face: '≣', img: 'assets/boss_stack.png', taunts: ['递归太深，你会崩溃的！', '栈已满，无路可退。'] },
+    { name: 'The Deadlock', sub: '死锁之环', face: '⊗', img: 'assets/boss_deadlock.png', taunts: ['谁也拿不到锁——包括你！', '资源被我全部占用了。'] },
+    { name: 'Infinite Loop', sub: '无限循环', face: '∞', img: 'assets/boss_loop.png', taunts: ['while(true) 永不停歇！', '你找不到我的终止条件。'] },
   ];
+  const HERO_IMG = 'assets/hero_back.png';
 
   /* ============================================================
      App: 屏幕路由 (menu / learn / battle / result)
@@ -508,6 +509,10 @@
       const b = this.boss;
       this.stage = el(`
         <div class="cg-screen cg-battle">
+            <div class="cg-spritelayer" aria-hidden="true">
+              ${b.img ? `<img class="cg-sprite cg-sprite-boss" data-ref="bossSprite" src="${esc(b.img)}" alt="" onerror="this.style.display='none'">` : ''}
+              <img class="cg-sprite cg-sprite-hero" data-ref="heroSprite" src="${esc(HERO_IMG)}" alt="" onerror="this.style.display='none'">
+            </div>
             <div class="cg-topbar">
               <button class="cg-back" data-ref="exit" title="退出">✕</button>
               <div class="cg-topbar-title">${esc(b.name)}<small>${esc(b.sub || '')}</small></div>
@@ -524,7 +529,7 @@
 
                 <div class="cg-hud">
                   <div class="cg-hprow">
-                    <div class="cg-face foe">${esc(b.face || '◈')}</div>
+                    <div class="cg-face foe">${b.img ? `<img src="${esc(b.img)}" alt="" onerror="this.parentNode.textContent='${esc(b.face || '◈')}'">` : esc(b.face || '◈')}</div>
                     <div class="cg-hpmeta">
                       <div class="cg-hpname"><span>${esc(b.name)}<span class="foe-tag">ENRAGED</span></span><small data-ref="bossHpText"></small></div>
                       <div class="cg-bar foe"><div class="cg-ghost" data-ref="bossGhost"></div><div class="cg-fill foe" data-ref="bossFill"></div></div>
@@ -721,6 +726,7 @@
         this._renderBars(); this._renderCombo();
         this._anim(this.ref.energyTrack, 'cg-pop .3s ease', 300);
         this.shake(crit ? 2 : 1); if (crit) this.flash('#ffffff', .5);
+        this._spriteHit('boss');
         this.dmgNum(0.72, 0.30, dmg, crit ? 'crit' : 'normal');
         this.shards(0.72, 0.30, crit ? 9 : 5);
       }, 150);
@@ -741,6 +747,7 @@
         this.heroHP = Math.max(0, this.heroHP - dmg);
         this._renderBars();
         this.shake(2); this.flash('#ef4444', .3);
+        this._spriteHit('hero');
         this.dmgNum(0.28, 0.62, dmg, 'player');   // 在玩家血条一侧飘伤害
       }, 120);
       this._after(() => {
@@ -762,6 +769,7 @@
         const burst = this._burstMaster();
         this._renderBars(); this._renderProgress();
         this.flash('#ffffff', .72); this.shake(2);      // 全屏闪光 + Boss 受击抖动
+        this._spriteHit('boss');
         this.dmgNum(0.72, 0.30, burst.dmg, 'ult'); this.shards(0.72, 0.30, 14);
       }, 1000);
       this._after(() => {
@@ -810,6 +818,7 @@
       if (this.settled) return; this.settled = true;
       this._stopTimer();
       if (win) this.bossHP = 0;   // 胜利: Boss 击碎
+      if (this.stage) this.stage.classList.add(win ? 'won' : 'lost');
       this._renderBars();
       SFX[win ? 'win' : 'lose']();
       try {
@@ -865,6 +874,13 @@
       const a = level >= 2 ? 'cg-shakeB .4s ease' : 'cg-shakeA .3s ease';
       frame.style.animation = 'none'; void frame.offsetWidth; frame.style.animation = a;
       this._after(() => { if (frame) frame.style.animation = ''; }, level >= 2 ? 420 : 320);
+    }
+    // 立绘受击反应: Boss 挨打(答对) / 本体挨打(答错). 短暂加 .hit 触发抖动+闪白
+    _spriteHit(who) {
+      const s = who === 'hero' ? this.ref.heroSprite : this.ref.bossSprite;
+      if (!s) return;
+      s.classList.remove('hit'); void s.offsetWidth; s.classList.add('hit');
+      this._after(() => { if (s) s.classList.remove('hit'); }, 420);
     }
     flash(color, a) {
       const f = this.ref.flash; if (!f) return;
