@@ -744,6 +744,7 @@
               <div class="cg-qhead">
                 <span class="cg-qbadge" data-ref="qbadge">Q1</span>
                 <span class="cg-qdir" data-ref="qdir"></span>
+                <button class="cg-qtimer" data-ref="timerToggle" title="点击开关计时"><span class="ic">⏱</span><span data-ref="timerNum">${this.timerSeconds}</span></button>
                 <button class="cg-burst-btn" data-ref="ultBadge">⚡词爆 READY</button>
               </div>
               <div class="cg-qcard">
@@ -756,7 +757,6 @@
             <!-- 隐藏保留旧钩子(逻辑仍读写, 不显示) -->
             <div class="cg-hidden">
               <span data-ref="round"></span><span data-ref="count"></span>
-              <span data-ref="timerNum">${this.timerSeconds}</span><button data-ref="timerToggle"></button>
               <span data-ref="energyText"></span><div data-ref="energyTrack"></div>
               <div data-ref="bossGhost"></div><div data-ref="heroGhost"></div>
             </div>
@@ -1055,6 +1055,7 @@
       const txt = this.timerOn ? String(Math.ceil(this.timeLeft)) : '∞';
       if (this.ref.timeB) { this.ref.timeB.textContent = txt; this.ref.timeB.classList.toggle('danger', danger); }
       if (this.ref.timerNum) this.ref.timerNum.textContent = txt;
+      if (this.ref.timerToggle) { this.ref.timerToggle.classList.toggle('danger', danger); this.ref.timerToggle.classList.toggle('off', !this.timerOn); }
     }
     _renderCombo() {
       const show = this.combo >= 2;
