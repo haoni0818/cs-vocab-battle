@@ -356,6 +356,8 @@
     showResult(data, roundWords, pool, boss) {
       this._clear();
       const { answered, correct, maxCombo, total } = data;
+      const win = data.win !== false;              // 缺省视为胜利(兼容)
+      const mastered = data.mastered != null ? data.mastered : total;
       const acc = pct(correct, answered);
 
       // 按词聚合错题: 同一个词在多种考法下的错都归到一条
@@ -366,7 +368,7 @@
         byTerm.get(k).attempts.push(rec);
       }
       const groups = Array.from(byTerm.values());
-      const perfect = groups.length === 0;
+      const perfect = win && groups.length === 0;   // 只有胜利且零错才叫完美
       const formName = { term2cn: '英→中', cn2term: '中→英', cloze: '例句填空' };
 
       let body;
@@ -376,6 +378,13 @@
             <div class="em">🏆</div>
             <div class="msg">完美掌握！<br>每个词都在多种考法下答对</div>
             <div class="sub">${esc(boss.name)} 被彻底击碎 · 这 ${total} 个词你是真懂了, 不只是记住翻译</div>
+          </div>`;
+      } else if (groups.length === 0) {
+        // 胜利但无错题聚合(理论上等于 perfect); 兜底
+        body = `
+          <div class="cg-perfect-box">
+            <div class="em">${win ? '🏆' : '💥'}</div>
+            <div class="msg">${win ? '通关！' : '血量耗尽'}</div>
           </div>`;
       } else {
         const items = groups.map(g => {
@@ -396,27 +405,33 @@
               <div class="cg-rv-picked">${attemptsHtml}</div>
             </div>`;
         }).join('');
+        const label = win
+          ? `错题复盘 · ${groups.length} 个词 (读例句, 体会怎么用)`
+          : `血量耗尽 · 先复盘这 ${groups.length} 个错词 (读例句), 再来`;
         body = `
-          <div class="cg-review-label">错题复盘 · ${groups.length} 个词 (读例句, 体会怎么用)</div>
+          <div class="cg-review-label">${label}</div>
           <div class="cg-review-list">${items}</div>`;
       }
 
-      const enClass = perfect ? 'perfect' : 'win';
-      const enText = perfect ? 'MASTERED' : 'CLEAR';
-      const zhText = perfect ? '全部真掌握 · 满分' : '通关 · 有词曾答错, 复盘一遍';
+      const enClass = !win ? 'lose' : perfect ? 'perfect' : 'win';
+      const enText = !win ? 'DEFEAT' : perfect ? 'MASTERED' : 'CLEAR';
+      const zhText = !win
+        ? `血量归零 · 已掌握 ${mastered}/${total} 词`
+        : perfect ? '全部真掌握 · 满分' : '通关 · 有词曾答错, 复盘一遍';
 
+      const hasWrongs = groups.length > 0;
       const view = el(`
         <div class="cg-screen cg-result">
           <div class="cg-result-hero">
             <div class="cg-result-en ${enClass}">${enText}</div>
             <div class="cg-result-zh">${zhText}</div>
-            <div class="cg-result-stat">掌握 <b>${total}</b> 词 · 答题 <b>${answered}</b> · 答对 <b>${correct}</b> · 正确率 <b>${acc}%</b> · 连击 <b>x${maxCombo}</b></div>
+            <div class="cg-result-stat">掌握 <b>${mastered}/${total}</b> 词 · 答题 <b>${answered}</b> · 答对 <b>${correct}</b> · 正确率 <b>${acc}%</b> · 连击 <b>x${maxCombo}</b></div>
           </div>
           ${body}
           <div class="cg-result-actions">
-            ${perfect ? '' : '<button class="cg-btn" data-ref="redo">重练错词 🔁</button>'}
+            ${hasWrongs ? '<button class="cg-btn" data-ref="redo">重练错词 🔁</button>' : ''}
             <div class="cg-mini-row">
-              <button class="cg-btn ${perfect ? '' : 'ghost'}" data-ref="again">再来一轮 ⚔</button>
+              <button class="cg-btn ${hasWrongs ? 'ghost' : ''}" data-ref="again">${win ? '再来一轮 ⚔' : '整关重来 ⚔'}</button>
               <button class="cg-btn ghost" data-ref="menu">返回选关</button>
             </div>
           </div>
@@ -461,6 +476,9 @@
       this.targetHits = this.wordState.reduce((a, s) => a + this.needPerWord, 0);
       this.bossMax = Math.max(60, this.targetHits * 20);
       this.bossHP = this.bossMax;
+      // 玩家血条(调平数值): 满血 100, 答错扣 ~13, 需 6~8 次才见底, 一次绝不致死
+      this.heroMax = 100; this.heroHP = this.heroMax;
+      this.wrongDmg = 13;                    // 每次答错扣血(适中): 100/13≈7.7 次见底
       this.energy = 0; this.combo = 0; this.maxCombo = 0;
 
       this.timerOn = true;
@@ -512,6 +530,13 @@
                       <div class="cg-bar foe"><div class="cg-ghost" data-ref="bossGhost"></div><div class="cg-fill foe" data-ref="bossFill"></div></div>
                     </div>
                   </div>
+                  <div class="cg-hprow">
+                    <div class="cg-face hero">&gt;_</div>
+                    <div class="cg-hpmeta">
+                      <div class="cg-hpname"><span>YOU 你</span><small data-ref="heroHpText"></small></div>
+                      <div class="cg-bar hero"><div class="cg-ghost" data-ref="heroGhost"></div><div class="cg-fill hero" data-ref="heroFill"></div></div>
+                    </div>
+                  </div>
                 </div>
 
                 <div class="cg-statusbar">
@@ -545,7 +570,6 @@
             <div class="cg-flashwhite" data-ref="flash"></div>
 
             <div class="cg-cutin" data-ref="cutin">
-              <div class="cg-cutin-rays"></div>
               <div class="cg-cutin-body"><div class="cg-cutin-en">WORD BURST</div><div class="cg-cutin-zh"><span>词</span><span>爆</span></div></div>
             </div>
         </div>`);
@@ -584,7 +608,7 @@
     _next() {
       if (this._destroyed) return;
       const pick = this._pickNext();
-      if (!pick) { this._finish(); return; }
+      if (!pick) { this._finish(true); return; }   // 全部掌握 = 胜利
       this._loadQuestion(pick.state, pick.form);
     }
 
@@ -709,15 +733,20 @@
     }
 
     _resolveWrong() {
-      // 掌握制唯一结束条件是"全部掌握", 答错不掉血、不死亡, 只清连击 + 受击特效
+      // 答错: 清连击 + 扣适中的血(调平, 一次绝不致死, 6~8 次才见底)
       this.combo = 0; this._renderCombo();
+      const dmg = this.enraged ? this.wrongDmg + 2 : this.wrongDmg;   // 狂暴略高但仍非致死
       SFX.hurt();
       this._after(() => {
+        this.heroHP = Math.max(0, this.heroHP - dmg);
+        this._renderBars();
         this.shake(2); this.flash('#ef4444', .3);
-        // 红色"MISS"提示(不再掉血飘数字)
-        this.missTag(0.5, 0.30);
+        this.dmgNum(0.28, 0.62, dmg, 'player');   // 在玩家血条一侧飘伤害
       }, 120);
-      this._after(() => this._afterTurn(), 640);
+      this._after(() => {
+        if (this.heroHP <= 0) { this._finish(false); return; }   // 血见底 = 失败
+        this._afterTurn();                                        // 否则继续下一题
+      }, 700);
     }
 
     // auto=true: 由"答对且能量满"自动触发, 放完直接进下一题
@@ -727,10 +756,14 @@
       this._stopTimer(); this.locked = true; this.ultActive = true;
       this.ref.cutin.classList.add('show'); SFX.special();
       this._after(() => {
-        const dmg = 50; this.energy = 0;   // Boss 血量由掌握进度决定, 词爆只做全屏特效
-        this._renderBars(); this.flash('#ffffff', .72); this.shake(2);
-        this.dmgNum(0.72, 0.30, dmg, 'ult'); this.shards(0.72, 0.30, 14);
-      }, 1100);
+        this.energy = 0;
+        // 词爆造成真实 Boss 大伤害: 直接把一个"最接近掌握"的未掌握词一击补满掌握,
+        // 掌握进度大幅推进 = Boss 血条明显下掉, 加速取胜。
+        const burst = this._burstMaster();
+        this._renderBars(); this._renderProgress();
+        this.flash('#ffffff', .72); this.shake(2);      // 全屏闪光 + Boss 受击抖动
+        this.dmgNum(0.72, 0.30, burst.dmg, 'ult'); this.shards(0.72, 0.30, 14);
+      }, 1000);
       this._after(() => {
         this.ref.cutin.classList.remove('show'); this.ultActive = false;
         if (auto) {
@@ -741,7 +774,22 @@
           this.locked = false;
           if (this.timerOn) this._startTimer();
         }
-      }, 1620);
+      }, 1520);
+    }
+
+    // 词爆结算: 选一个"离掌握最近"的未掌握词, 把它剩余考法一次补满(真实推进掌握 = 真实 Boss 伤害)
+    _burstMaster() {
+      const before = this.bossHP;
+      const un = this.wordState.filter(s => s.passed.size < this.needPerWord);
+      if (un.length) {
+        // 优先补那些已过 1 种考法的(离掌握最近), 让词爆更"值"
+        un.sort((a, b) => b.passed.size - a.passed.size);
+        const s = un[0];
+        for (const f of s.forms) { if (s.passed.size >= this.needPerWord) break; s.passed.add(f); }
+      }
+      const remain = this.total - this._masteredCount();
+      this.bossHP = this.bossMax * (remain / this.total);
+      return { dmg: Math.max(1, Math.round(before - this.bossHP)) };
     }
 
     _afterTurn() {
@@ -758,14 +806,16 @@
       this._next();
     }
 
-    _finish() {
+    _finish(win) {
       if (this.settled) return; this.settled = true;
       this._stopTimer();
-      this.bossHP = 0; this._renderBars();
-      const perfect = this.wrongs.length === 0;
-      SFX.win();
+      if (win) this.bossHP = 0;   // 胜利: Boss 击碎
+      this._renderBars();
+      SFX[win ? 'win' : 'lose']();
       try {
         this.onFinish({
+          win: !!win,
+          mastered: this._masteredCount(),
           answered: this.answeredCount, correct: this.correctCount,
           maxCombo: this.maxCombo, wrongs: this.wrongs.slice(),
           total: this.total,
@@ -776,9 +826,14 @@
     /* ---------- 渲染 ---------- */
     _renderBars() {
       const bp = Math.max(0, this.bossHP / this.bossMax * 100);
+      const hp = Math.max(0, this.heroHP / this.heroMax * 100);
       const ep = Math.max(0, Math.min(100, this.energy)), ready = ep >= 100;
       this.ref.bossFill.style.width = bp + '%'; this.ref.bossGhost.style.width = bp + '%';
       this.ref.bossHpText.textContent = `${Math.ceil(this.bossHP)}/${this.bossMax}`;
+      this.ref.heroFill.style.width = hp + '%'; this.ref.heroGhost.style.width = hp + '%';
+      this.ref.heroHpText.textContent = `${Math.ceil(this.heroHP)}/${this.heroMax}`;
+      // 血量偏低警示
+      this.ref.heroFill.classList.toggle('low', this.heroHP / this.heroMax <= 0.3);
       this.ref.energyFill.style.width = ep + '%';
       this.ref.energyText.textContent = ready ? '词爆!' : Math.round(ep) + '%';
       this.ref.energyTrack.classList.toggle('ready', ready);
@@ -817,14 +872,6 @@
       f.style.transition = 'opacity .32s ease'; f.style.opacity = '0';
     }
     // 答错提示: 红色 "MISS" 飘字(不掉血)
-    missTag(fx, fy) {
-      const layer = this.ref.fx; if (!layer) return;
-      const r = layer.getBoundingClientRect();
-      const x = r.width * fx, y = r.height * fy;
-      const d = document.createElement('div'); d.className = 'cg-dmg'; d.textContent = 'MISS';
-      d.style.cssText = `left:${x}px;top:${y}px;font-size:40px;color:#f87171;text-shadow:0 0 16px #ef4444,0 2px 4px rgba(0,0,0,.6);animation:cg-dmgFloat .9s ease-out forwards;`;
-      layer.appendChild(d); this._after(() => d.remove(), 1000);
-    }
     dmgNum(fx, fy, amount, type) {
       const layer = this.ref.fx; if (!layer) return;
       const r = layer.getBoundingClientRect();

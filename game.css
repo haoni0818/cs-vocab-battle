@@ -149,12 +149,13 @@ body.cg-body{
 .cg-pane-left{display:flex;flex-direction:column;min-height:0;}
 .cg-pane-right{display:flex;flex-direction:column;min-height:0;margin-top:auto;}
 
-/* Boss 血条 HUD (血量=未掌握比例, 掌握全部即击碎; 玩家不掉血不死亡) */
+/* 血条 HUD (上=Boss 掌握进度; 下=玩家血量, 答错扣血, 归零=失败) */
 .cg-hud{display:flex;flex-direction:column;gap:9px;margin-bottom:12px;}
 .cg-hprow{display:flex;align-items:center;gap:10px;}
 .cg-hprow .cg-face{width:40px;height:40px;flex:0 0 auto;border-radius:11px;display:flex;align-items:center;justify-content:center;
   font-family:'Consolas',monospace;font-weight:800;font-size:18px;}
 .cg-face.foe{background:linear-gradient(160deg,rgba(168,85,247,.4),rgba(50,20,80,.6));border:1.5px solid rgba(216,180,254,.55);color:#f0e0ff;}
+.cg-face.hero{background:linear-gradient(160deg,rgba(34,211,238,.32),rgba(30,39,64,.6));border:1.5px solid rgba(103,232,249,.5);color:#cffafe;}
 .cg-battle.enraged .cg-face.foe{background:linear-gradient(160deg,rgba(239,68,68,.42),rgba(80,10,20,.6));border-color:rgba(252,165,165,.6);}
 .cg-hpmeta{flex:1;min-width:0;}
 .cg-hpname{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;font-weight:800;margin-bottom:4px;}
@@ -163,11 +164,14 @@ body.cg-body{
 .cg-battle.enraged .cg-hpname .foe-tag{display:inline;}
 .cg-bar{position:relative;height:13px;border-radius:7px;background:rgba(8,11,22,.85);overflow:hidden;box-shadow:inset 0 2px 5px rgba(0,0,0,.55);}
 .cg-bar.foe{border:1px solid rgba(216,180,254,.4);}
+.cg-bar.hero{border:1px solid rgba(103,232,249,.4);}
 .cg-fill,.cg-ghost{position:absolute;top:0;bottom:0;left:0;border-radius:6px;}
 .cg-ghost{background:rgba(255,255,255,.4);transition:width .6s ease .2s;}
 .cg-fill{transition:width .16s linear;}
 .cg-fill.foe{background:linear-gradient(90deg,#a855f7,#6366f1);box-shadow:0 0 10px rgba(168,85,247,.6);}
 .cg-battle.enraged .cg-fill.foe{background:linear-gradient(90deg,#ef4444,#f59e0b);}
+.cg-fill.hero{background:linear-gradient(90deg,#22d3ee,#4ade80);box-shadow:0 0 10px rgba(34,211,238,.55);}
+.cg-fill.hero.low{background:linear-gradient(90deg,#ef4444,#f59e0b);box-shadow:0 0 12px rgba(239,68,68,.7);animation:cg-glowPulse 1s ease-in-out infinite;}
 
 /* 掌握进度条(顶部): 每个词须多考法答对才计入 */
 .cg-master{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
@@ -257,10 +261,9 @@ body.cg-body{
 .cg-dmg .cg-tag{font-size:.42em;letter-spacing:1px;vertical-align:super;color:#fff;}
 .cg-shard{position:absolute;font-family:'Consolas',monospace;font-weight:800;pointer-events:none;text-shadow:0 0 10px currentColor;transform:translate(-50%,-50%);}
 
-/* CUT-IN 词爆 */
-.cg-cutin{position:absolute;inset:0;z-index:60;overflow:hidden;display:none;background:radial-gradient(circle at 50% 50%,rgba(50,30,90,.6),rgba(8,6,18,.95));}
+/* CUT-IN 词爆 (干净: 全屏闪光 + "词爆!" 横幅, 无旋转背景, 舞台不歪不斜) */
+.cg-cutin{position:absolute;inset:0;z-index:60;overflow:hidden;display:none;background:radial-gradient(circle at 50% 50%,rgba(50,30,90,.62),rgba(8,6,18,.96));}
 .cg-cutin.show{display:block;animation:cg-overlayIn .2s ease;}
-.cg-cutin-rays{position:absolute;left:50%;top:50%;width:1600px;height:1600px;transform:translate(-50%,-50%);background:repeating-conic-gradient(from 0deg,transparent 0deg 3deg,rgba(129,140,248,.16) 3deg 4deg);animation:cg-speedSpin 7s linear infinite;}
 .cg-cutin-body{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;}
 .cg-cutin-en{font-family:'Consolas',monospace;font-weight:900;font-size:44px;letter-spacing:4px;color:#fff;text-shadow:0 0 30px #818cf8,0 0 70px #a855f7;animation:cg-wordSlam .6s cubic-bezier(.2,.8,.3,1) both;}
 .cg-cutin-zh{display:flex;gap:20px;}
@@ -273,6 +276,7 @@ body.cg-body{
 .cg-result-en{font-family:'Consolas',monospace;font-weight:900;font-size:46px;letter-spacing:4px;}
 .cg-result-en.win{color:#f59e0b;text-shadow:0 0 40px rgba(245,158,11,.7);}
 .cg-result-en.perfect{color:#4ade80;text-shadow:0 0 40px rgba(74,222,128,.7);}
+.cg-result-en.lose{color:#f87171;text-shadow:0 0 40px rgba(248,113,113,.7);}
 .cg-result-zh{font-weight:900;font-size:26px;color:#fff;margin-top:6px;}
 .cg-result-stat{font-family:'Consolas',monospace;font-weight:700;font-size:14px;color:#c9c2ee;margin-top:10px;line-height:1.7;}
 .cg-result-stat b{color:#f59e0b;}
@@ -317,7 +321,6 @@ body.cg-body{
 @keyframes cg-gethit{0%{transform:scale(1)}28%{transform:scale(1.14)}55%{transform:scale(.94)}100%{transform:scale(1)}}
 @keyframes cg-pop{0%{transform:scale(1)}40%{transform:scale(1.06)}100%{transform:scale(1)}}
 @keyframes cg-glowPulse{0%,100%{filter:brightness(1)}50%{filter:brightness(1.4)}}
-@keyframes cg-speedSpin{from{transform:translate(-50%,-50%) rotate(0)}to{transform:translate(-50%,-50%) rotate(360deg)}}
 @keyframes cg-wordSlam{0%{transform:scale(2.4);opacity:0;filter:blur(8px)}30%{opacity:1}46%{transform:scale(.94);filter:blur(0)}58%{transform:scale(1.05)}100%{transform:scale(1)}}
 @keyframes cg-letterPop{0%{transform:translateY(40px) scale(0);opacity:0}60%{transform:translateY(-6px) scale(1.18);opacity:1}100%{transform:translateY(0) scale(1)}}
 @keyframes cg-overlayIn{from{opacity:0}to{opacity:1}}
