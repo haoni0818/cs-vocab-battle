@@ -250,58 +250,95 @@
       return { total: list.length, mastered: m, learning: l, fresh: n };
     },
 
-    /* ---------------- 菜单 ---------------- */
+    /* ---------------- 菜单 / Entry (照设计: PRESS START + 大标题 + 名字 + 难度 + Topic 卡片 + 右侧立绘) ---------------- */
+    // 每个真实 topic 对应一个 Boss 花名(照设计的 "BOSS: xxx" 展示; 真数据 topic 多于 4, 循环取 Boss)
+    _bossForTopic(topic, i) {
+      const map = {
+        'Data Representation': 'NULL 虚空兽', 'Data Structures': 'STACK 堆叠魔',
+        'Processor & OS': 'DEADLOCK 死锁王', 'Algorithms': 'LOOP 轮回兽',
+      };
+      if (map[topic]) return map[topic];
+      return BOSS_ROSTER[i % BOSS_ROSTER.length].name + ' ' + (BOSS_ROSTER[i % BOSS_ROSTER.length].sub || '');
+    },
+
     showMenu() {
       this._clear();
       const st = this.masteryStats(this.level);
       const topics = (CS_TOPICS[this.level] || []);
-      const chips = ['ALL'].concat(topics).map(t => {
+      const isA2 = this.level === 'A2';
+      // Topic 卡片(含 "全部 ALL"): tag=level, "N 词", name, "BOSS: …"
+      const items = ['ALL'].concat(topics);
+      const cards = items.map((t, i) => {
         const n = t === 'ALL' ? this.wordsFor(this.level, 'ALL').length : this.wordsFor(this.level, t).length;
-        const label = t === 'ALL' ? '全部 ALL' : t;
-        return `<button class="cg-topic ${t === this.topic ? 'on' : ''}" data-topic="${esc(t)}">${esc(label)} <em>${n}</em></button>`;
+        const name = t === 'ALL' ? '全部 ALL' : t;
+        const on = t === this.topic;
+        const bossLine = t === 'ALL' ? '混合 · 随机 Boss' : 'BOSS: ' + this._bossForTopic(t, i);
+        return `<button class="cg-topic ${on ? 'on' : ''} ${isA2 ? 'a2' : ''}" data-topic="${esc(t)}">
+          <div class="cg-topic-hd"><span class="cg-topic-tag">${esc(this.level)}</span><span class="cg-topic-count">${n} 词</span></div>
+          <div class="cg-topic-name">${esc(name)}</div>
+          <div class="cg-topic-boss">${esc(bossLine)}</div>
+        </button>`;
       }).join('');
 
+      const nm = Board.name();
       const view = el(`
         <div class="cg-screen cg-menu">
-          <div class="cg-menu-top">
-            <div class="cg-logo"><span class="cg-logo-mark">&lt;/&gt;</span> CS 术语对战</div>
-            <div class="cg-tagline">CIE 9618 · 先背单词卡, 再英中对照打 Boss</div>
-            <button class="cg-player" data-ref="player">${Board.name() ? '🎮 ' + esc(Board.name()) + ' · 改名' : '✎ 设置玩家名'}</button>
-          </div>
-
-          <div class="cg-level-tabs">
-            <button class="cg-level ${this.level === 'AS' ? 'on' : ''}" data-level="AS">AS 级<em>${this.wordsFor('AS', 'ALL').length} 词</em></button>
-            <button class="cg-level ${this.level === 'A2' ? 'on' : ''}" data-level="A2">A2 级<em>${this.wordsFor('A2', 'ALL').length} 词</em></button>
-          </div>
-
-          <div class="cg-mastery">
-            <div class="cg-mbar">
-              <div class="cg-mseg cg-mmastered" style="width:${st.total ? st.mastered / st.total * 100 : 0}%"></div>
-              <div class="cg-mseg cg-mlearning" style="width:${st.total ? st.learning / st.total * 100 : 0}%"></div>
+          <div class="cg-menu-inner">
+            <div class="cg-menu-form">
+              <div>
+                <div class="cg-press-start">▶ PRESS START</div>
+                <h1 class="cg-h1"><span class="cn">背单词</span><br><span class="cn">对战</span></h1>
+                <p class="cg-lead">背 CS 术语，打 Boss。学卡 → 答题 → 血量见分晓。CIE 9618，选好关卡、输入名字，开打！</p>
+              </div>
+              <div>
+                <label class="cg-field-label">你的名字</label>
+                <input class="cg-name-input" data-ref="name" value="${esc(nm)}" placeholder="TRAINER" maxlength="16">
+              </div>
+              <div>
+                <label class="cg-field-label">难度</label>
+                <div class="cg-diff">
+                  <button class="${this.level === 'AS' ? 'on' : ''}" data-level="AS">AS Level</button>
+                  <button class="${isA2 ? 'on a2' : ''}" data-level="A2">A2 Level</button>
+                </div>
+              </div>
+              <div>
+                <label class="cg-field-label">选择关卡 · Topic</label>
+                <div class="cg-topics">${cards}</div>
+              </div>
+              <div class="cg-mastery">
+                <div class="cg-mbar">
+                  <div class="cg-mseg cg-mmastered" style="width:${st.total ? st.mastered / st.total * 100 : 0}%"></div>
+                  <div class="cg-mseg cg-mlearning" style="width:${st.total ? st.learning / st.total * 100 : 0}%"></div>
+                </div>
+                <div class="cg-mlegend"><span><i class="d-m"></i>已掌握 ${st.mastered}</span><span><i class="d-l"></i>学习中 ${st.learning}</span><span><i class="d-n"></i>生词 ${st.fresh}</span></div>
+              </div>
+              <button class="cg-primary" data-ref="play">进入战斗 ▶</button>
+              <div class="cg-menu-mini">
+                <button class="cg-btn ghost sm" data-ref="board">🏆 排行榜</button>
+                <button class="cg-btn ghost sm" data-ref="mute">${SFX.isMuted() ? '🔇 静音' : '🔊 音效'}</button>
+                <button class="cg-btn ghost sm" data-ref="reset">重置进度</button>
+              </div>
+              <div class="cg-hint">桌面按 <b>Q W / A S</b> 作答 · 手机直接点 · 打完全部题, 错题会复盘。</div>
             </div>
-            <div class="cg-mlegend"><span><i class="d-m"></i>已掌握 ${st.mastered}</span><span><i class="d-l"></i>学习中 ${st.learning}</span><span><i class="d-n"></i>生词 ${st.fresh}</span></div>
-          </div>
-
-          <div class="cg-section-label">选择 Topic 关卡</div>
-          <div class="cg-topics">${chips}</div>
-
-          <div class="cg-menu-actions">
-            <button class="cg-btn" data-ref="play">开始学习 + 对战 ▶</button>
-            <div class="cg-mini-row">
-              <button class="cg-btn ghost sm" data-ref="board">🏆 排行榜</button>
-              <button class="cg-btn ghost sm" data-ref="mute">${SFX.isMuted() ? '🔇 静音' : '🔊 音效'}</button>
-              <button class="cg-btn ghost sm" data-ref="reset">重置进度</button>
+            <div class="cg-hero-splash">
+              <div class="shadow"></div>
+              <div class="art">
+                <div class="placeholder">HERO<br>立绘<br>hero_back</div>
+                <img src="${esc(HERO_IMG)}" alt="" onerror="this.style.display='none'">
+              </div>
             </div>
-            <div class="cg-hint">先进 <b>背单词</b> 环节逐张看卡, 再进 <b>对战</b>。<br>桌面按 <b>Q W / A S</b> 作答 · 手机直接点 · 打完全部题, 错题会复盘。</div>
           </div>
         </div>`);
 
       this.root.appendChild(view);
-      view.querySelectorAll('[data-level]').forEach(b => b.addEventListener('click', () => { SFX.click(); this.level = b.dataset.level; this.topic = 'ALL'; this.showMenu(); }));
+      const nameInput = view.querySelector('[data-ref="name"]');
+      const commitName = () => { const v = (nameInput.value || '').trim(); if (v) { Board.setName(v); Board.updateSelf(); } };
+      nameInput.addEventListener('change', commitName);
+      nameInput.addEventListener('blur', commitName);
+      view.querySelectorAll('[data-level]').forEach(b => b.addEventListener('click', () => { SFX.click(); commitName(); this.level = b.dataset.level; this.topic = 'ALL'; this.showMenu(); }));
       view.querySelectorAll('[data-topic]').forEach(b => b.addEventListener('click', () => { SFX.click(); this.topic = b.dataset.topic; this.showMenu(); }));
-      view.querySelector('[data-ref="play"]').addEventListener('click', () => { SFX.click(); this.ensureName(); this.startRound(); });
-      view.querySelector('[data-ref="player"]').addEventListener('click', () => { SFX.click(); this.ensureName(true); this.showMenu(); });
-      view.querySelector('[data-ref="board"]').addEventListener('click', () => { SFX.click(); this.showBoard(); });
+      view.querySelector('[data-ref="play"]').addEventListener('click', () => { SFX.click(); commitName(); this.ensureName(); this.startRound(); });
+      view.querySelector('[data-ref="board"]').addEventListener('click', () => { SFX.click(); commitName(); this.showBoard(); });
       view.querySelector('[data-ref="reset"]').addEventListener('click', () => { if (confirm('确定清空所有掌握度进度吗？')) { Progress.save({}); this.showMenu(); } });
       view.querySelector('[data-ref="mute"]').addEventListener('click', (e) => { SFX.toggle(); e.currentTarget.textContent = SFX.isMuted() ? '🔇 静音' : '🔊 音效'; });
     },
@@ -319,21 +356,19 @@
       this._clear();
       const me = Board.name();
       const my = Board.myStats();
+      const topicName = this.topic === 'ALL' ? `${this.level} 全部` : this.topic;
       const view = el(`
         <div class="cg-screen cg-board">
-          <div class="cg-board-top">
-            <button class="cg-back" data-ref="back">← 返回</button>
-            <div class="cg-board-title">🏆 完成度排行榜</div>
-            <span></span>
+          <div class="cg-board-head">
+            <div class="cg-board-title">🏆 <span class="cn">排行榜</span></div>
+            <div class="cg-board-sub">${esc(topicName)} · 本周高分 ${me ? '' : '· 未设玩家名'}</div>
           </div>
-          <div class="cg-board-sub">按 <b>已掌握词数 / 总词数</b> 排名${me ? ` · 你: ${esc(me)} ${my.pct}%` : ' · 未设玩家名'}</div>
-          <div class="cg-board-list" data-ref="list"><div class="cg-bd-empty">${Board.remoteOn() ? '加载共享榜中…' : ''}</div></div>
-          <div class="cg-hint" data-ref="hint">${Board.remoteOn() ? '全班共享榜(Firebase)。' : '目前是本机排行榜。要跨设备共享(Kahoot 式)，配一个 Firebase 即可。'}</div>
+          <div class="cg-board-list" data-ref="list"><div class="cg-board-empty">${Board.remoteOn() ? '加载共享榜中…' : ''}</div></div>
+          <button class="cg-board-again" data-ref="back">再战一局 ▶</button>
         </div>`);
       this.root.appendChild(view);
       view.querySelector('[data-ref="back"]').addEventListener('click', () => { SFX.click(); this.showMenu(); });
       const listEl = view.querySelector('[data-ref="list"]');
-      const hintEl = view.querySelector('[data-ref="hint"]');
 
       const render = (rows, failed) => {
         // 并入自己(即使还没同步成功, 也保证自己在榜且是最新完成度)
@@ -341,12 +376,24 @@
         for (const e of rows) if (e && e.name) map.set(e.name, e);
         if (me) map.set(me, { name: me, mastered: my.mastered, total: my.total, pct: my.pct, ts: Date.now() });
         const ranked = Board.ranked(Array.from(map.values()));
-        listEl.innerHTML = ranked.length ? ranked.map((e, i) => {
-          const medal = ['🥇', '🥈', '🥉'][i] || `<span class="cg-bd-rank">${i + 1}</span>`;
+        // 分数展示 = 掌握词数 * 20(纯展示; 排序仍按完成度). 条宽 = 相对最高分
+        const withScore = ranked.map(e => ({ ...e, score: (e.mastered || 0) * 20 }));
+        const maxScore = Math.max(1, ...withScore.map(e => e.score));
+        listEl.innerHTML = withScore.length ? withScore.map((e, i) => {
           const self = e.name === me ? ' me' : '';
-          return `<div class="cg-bd-row${self}"><div class="cg-bd-pos">${medal}</div><div class="cg-bd-name">${esc(e.name)}${self ? ' <em>(你)</em>' : ''}</div><div class="cg-bd-bar"><div class="cg-bd-fill" style="width:${e.pct}%"></div></div><div class="cg-bd-pct">${e.pct}%<small>${e.mastered}/${e.total}</small></div></div>`;
-        }).join('') : '<div class="cg-bd-empty">还没有记录。设置玩家名、打几局掌握单词就上榜啦。</div>';
-        if (failed) hintEl.textContent = '共享榜拉取失败(检查网络/配置)，暂显示本机榜。';
+          const rankCls = i === 0 ? ' top1' : i === 1 ? ' top2' : i === 2 ? ' top3' : '';
+          const youTag = self ? '<span class="cg-bd-you">YOU</span>' : '';
+          const barPct = Math.round(e.score / maxScore * 100);
+          return `<div class="cg-bd-row${rankCls}${self}">
+            <div class="cg-bd-rank">${i + 1}</div>
+            <div class="cg-bd-body">
+              <div class="cg-bd-namerow"><span class="cg-bd-name">${esc(e.name)}</span>${youTag}</div>
+              <div class="cg-bd-bar"><div class="fill" style="width:${barPct}%"></div></div>
+            </div>
+            <div class="cg-bd-score">${e.score}</div>
+          </div>`;
+        }).join('') : '<div class="cg-board-empty">还没有记录。设置玩家名、打几局掌握单词就上榜啦。</div>';
+        if (failed) listEl.insertAdjacentHTML('beforeend', '<div class="cg-board-empty">共享榜拉取失败(检查网络/配置)，暂显示本机榜。</div>');
       };
 
       if (Board.remoteOn()) {
@@ -376,16 +423,15 @@
 
       const view = el(`
         <div class="cg-screen cg-learn">
-          <div class="cg-topbar">
-            <button class="cg-back" data-ref="back" title="返回">‹</button>
-            <div class="cg-topbar-title">背单词 · 记忆环节<small>${esc(topicName)}</small></div>
-            <div class="cg-count" data-ref="count"></div>
+          <div class="cg-learn-top">
+            <div class="cg-learn-title"><button class="cg-back-mini" data-ref="back" title="返回">◀ 返回</button><span>学习卡 · <span class="topic">${esc(topicName)}</span></span></div>
+            <div class="cg-learn-count" data-ref="count"></div>
           </div>
-          <div class="cg-progress"><div class="cg-progress-fill" data-ref="prog"></div></div>
-          <div class="cg-flashwrap" data-ref="wrap"></div>
+          <div class="cg-cards" data-ref="wrap"></div>
           <div class="cg-learn-nav">
-            <button class="cg-btn ghost" data-ref="prev">‹ 上一张</button>
-            <button class="cg-btn" data-ref="next">下一张 ›</button>
+            <button class="cg-nav-btn" data-ref="prev">◀ 上一张</button>
+            <button class="cg-nav-btn" data-ref="next">下一张 ▶</button>
+            <button class="cg-start-battle" data-ref="battle">开始对战 ⚔</button>
           </div>
         </div>`);
       this.root.appendChild(view);
@@ -395,53 +441,49 @@
       const render = () => {
         const w = roundWords[idx];
         ref.count.textContent = `${idx + 1} / ${total}`;
-        ref.prog.style.width = ((idx + 1) / total * 100) + '%';
-        // 左栏(英文): 术语 + 🔊读音 + 英文定义 + 例句
-        const defHtml = w.definition ? `<div class="fc-def"><span class="lbl">DEFINITION</span>${esc(w.definition)}</div>` : '';
-        const exHtml = w.example ? `<div class="fc-ex"><span class="lbl">EXAMPLE 例句</span>${esc(w.example)}</div>` : '';
-        // 右栏(中文): 中文术语/释义 cn + 中文解释 cn_def(兜底 cn)
+        // 左卡(英文): ENGLISH 标签 + 🔊 + 术语 + 英文定义 + EXAMPLE
+        const defHtml = w.definition ? `<div class="cg-def-en">${esc(w.definition)}</div>` : '';
+        const exHtml = w.example ? `<div class="cg-ex-wrap"><div class="cg-ex-label">EXAMPLE</div><div class="cg-ex-en">${esc(w.example)}</div></div>` : '';
+        // 右卡(中文): 中文 标签 + cn 大词 + cn_def + 例句(用 example, 无独立 ex_cn 时以英文例句兜底)
         const cnDef = cnDefOf(w);
-        const cnDefHtml = (cnDef && cnDef !== cnOf(w))
-          ? `<div class="fc-cndef"><span class="lbl">中文解释</span>${esc(cnDef)}</div>`
-          : `<div class="fc-cndef"><span class="lbl">中文解释</span>${esc(cnDef || cnOf(w))}</div>`;
+        const cnDefHtml = `<div class="cg-def-cn">${esc(cnDef || cnOf(w))}</div>`;
+        const cnExHtml = w.example ? `<div class="cg-ex-wrap"><div class="cg-ex-label">例句</div><div class="cg-ex-cn">${esc(w.example)}</div></div>` : '';
         const card = el(`
-          <div class="cg-flash">
-            <div class="cg-fc-col en">
-              <div class="fc-colhd">EN · 英文</div>
-              <div class="fc-termrow">
-                <div class="fc-term">${esc(w.term)}</div>
-                <button class="fc-speak" data-ref="speak" type="button" title="朗读">🔊</button>
+          <div class="cg-cards-inner" style="display:contents">
+            <div class="cg-card en">
+              <div class="cg-card-hd">
+                <span class="cg-card-label">ENGLISH</span>
+                <button class="cg-speak" data-ref="speak" type="button" title="朗读">🔊</button>
               </div>
-              <div class="fc-tag">${esc(w.topic || 'CS')} · ${esc(w.level)}</div>
+              <div class="cg-term-en">${esc(w.term)}</div>
+              <div class="cg-term-phon"><span class="pos">${esc(w.topic || 'CS')} · ${esc(w.level)}</span></div>
               ${defHtml}
               ${exHtml}
             </div>
-            <div class="cg-fc-col zh">
-              <div class="fc-colhd">中文</div>
-              <div class="fc-cn">${esc(cnOf(w))}</div>
+            <div class="cg-card zh">
+              <div class="cg-card-hd"><span class="cg-card-label">中文</span></div>
+              <div class="cg-term-cn">${esc(cnOf(w))}</div>
               ${cnDefHtml}
+              ${cnExHtml}
             </div>
           </div>`);
-        ref.wrap.innerHTML = ''; ref.wrap.appendChild(card);
-        const sp = card.querySelector('[data-ref="speak"]');
+        ref.wrap.innerHTML = '';
+        while (card.firstElementChild) ref.wrap.appendChild(card.firstElementChild);
+        const sp = ref.wrap.querySelector('[data-ref="speak"]');
         if (sp) sp.addEventListener('click', () => { SFX.click(); speak(w.term); });
-        ref.prev.disabled = false;
-        ref.prev.style.visibility = idx === 0 ? 'hidden' : 'visible';
-        ref.next.textContent = idx === total - 1 ? '开始对战 ⚔' : '下一张 ›';
+        ref.prev.hidden = idx === 0;
       };
       render();
 
       ref.back.addEventListener('click', () => { SFX.click(); this.showMenu(); });
       ref.prev.addEventListener('click', () => { if (idx > 0) { idx--; SFX.flip(); render(); } });
-      ref.next.addEventListener('click', () => {
-        if (idx < total - 1) { idx++; SFX.flip(); render(); }
-        else { SFX.click(); this.showBattle(roundWords, pool, boss); }
-      });
+      ref.next.addEventListener('click', () => { idx = (idx + 1) % total; SFX.flip(); render(); });
+      ref.battle.addEventListener('click', () => { SFX.click(); this.showBattle(roundWords, pool, boss); });
 
       // 键盘: 左右切卡, 回车/空格 = 下一张
       this._learnKey = (e) => {
         if (e.key === 'ArrowLeft') { ref.prev.click(); }
-        else if (e.key === 'ArrowRight') { if (idx < total - 1) { idx++; SFX.flip(); render(); } }
+        else if (e.key === 'ArrowRight') { ref.next.click(); }
         else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ref.next.click(); }
       };
       window.addEventListener('keydown', this._learnKey);
@@ -478,73 +520,65 @@
       const perfect = win && groups.length === 0;   // 只有胜利且零错才叫完美
       const formName = { term2cn: '英→中', cn2term: '中→英', cloze: '例句填空' };
 
-      let body;
-      if (perfect) {
-        body = `
-          <div class="cg-perfect-box">
-            <div class="em">🏆</div>
-            <div class="msg">完美掌握！<br>每个词都在多种考法下答对</div>
-            <div class="sub">${esc(boss.name)} 被彻底击碎 · 这 ${total} 个词你是真懂了, 不只是记住翻译</div>
-          </div>`;
-      } else if (groups.length === 0) {
-        // 胜利但无错题聚合(理论上等于 perfect); 兜底
-        body = `
-          <div class="cg-perfect-box">
-            <div class="em">${win ? '🏆' : '💥'}</div>
-            <div class="msg">${win ? '通关！' : '血量耗尽'}</div>
-          </div>`;
-      } else {
-        const items = groups.map(g => {
-          const w = g.word;
-          // 例句(重点): 先展示原句帮助理解用法
-          const exHtml = w.example ? `<div class="cg-rv-ex"><span class="lbl">EXAMPLE 例句(体会用法)</span>${esc(w.example)}</div>` : '';
-          const defHtml = w.definition ? `<div class="cg-rv-def">${esc(w.definition)}</div>` : '';
-          const attemptsHtml = g.attempts.map(rec => {
-            const tag = `<span class="fm">[${formName[rec.form] || '考法'}]</span>`;
-            if (rec.picked == null) return `<div class="cg-rv-line">${tag} <span class="miss">⏱ 超时未答</span> · 正确 <span class="v">${esc(rec.correctLabel)}</span></div>`;
-            return `<div class="cg-rv-line">${tag} 选了 <span class="x">${esc(rec.picked)}</span> · 正确 <span class="v">${esc(rec.correctLabel)}</span></div>`;
-          }).join('');
-          return `
-            <div class="cg-review-item">
-              <div class="cg-rv-head"><span class="cg-rv-term">${esc(w.term)}</span><span class="cg-rv-cn">${esc(cnOf(w))}</span></div>
-              ${exHtml}
-              ${defHtml}
-              <div class="cg-rv-picked">${attemptsHtml}</div>
-            </div>`;
+      // 错题复盘条目(设计: term + phon + cn + 🔊, cn_def, ex_en, "✗你选" / "✓正确")
+      const body = groups.map(g => {
+        const w = g.word;
+        const defHtml = (cnDefOf(w)) ? `<div class="cg-rv-def">${esc(cnDefOf(w))}</div>` : '';
+        const exHtml = w.example ? `<div class="cg-rv-ex">${esc(w.example)}</div>` : '';
+        const attemptsHtml = g.attempts.map(rec => {
+          const tag = `<span class="fm">[${formName[rec.form] || '考法'}]</span>`;
+          if (rec.picked == null) return `<div>${tag}<span class="miss">⏱ 超时未答</span> · <span class="v">✓ 正确：${esc(rec.correctLabel)}</span></div>`;
+          return `<div>${tag}<span class="x">✗ 你选：${esc(rec.picked)}</span> · <span class="v">✓ 正确：${esc(rec.correctLabel)}</span></div>`;
         }).join('');
-        const label = win
-          ? `错题复盘 · ${groups.length} 个词 (读例句, 体会怎么用)`
-          : `血量耗尽 · 先复盘这 ${groups.length} 个错词 (读例句), 再来`;
-        body = `
-          <div class="cg-review-label">${label}</div>
-          <div class="cg-review-list">${items}</div>`;
-      }
+        return `
+          <div class="cg-review-item">
+            <div class="cg-rv-head">
+              <span class="cg-rv-term">${esc(w.term)}</span>
+              <span class="cg-rv-cn">${esc(cnOf(w))}</span>
+              <button class="cg-rv-speak" data-speak="${esc(w.term)}" type="button">🔊</button>
+            </div>
+            ${defHtml}
+            ${exHtml}
+            <div class="cg-rv-picked">${attemptsHtml}</div>
+          </div>`;
+      }).join('');
 
-      const enClass = !win ? 'lose' : perfect ? 'perfect' : 'win';
-      const enText = !win ? 'DEFEAT' : perfect ? 'MASTERED' : 'CLEAR';
-      const zhText = !win
-        ? `血量归零 · 已掌握 ${mastered}/${total} 词`
-        : perfect ? '全部真掌握 · 满分' : '通关 · 有词曾答错, 复盘一遍';
+      const titleClass = win ? 'win' : 'lose';
+      const titleText = win ? '🏆 VICTORY' : '💀 DEFEATED';
+      const topicName = this.topic === 'ALL' ? `${this.level} 全部` : this.topic;
+      const subText = `${topicName} · ${esc(boss.name)} ${win ? '已击败' : '未击败'}`;
+      // SCORE 由答对/连击/正确率合成(纯展示; 排行榜仍按掌握完成度, 逻辑不变)
+      const score = correct * 100 + maxCombo * 20 + (perfect ? 300 : 0);
 
       const hasWrongs = groups.length > 0;
+      const reviewInner = perfect
+        ? `<div class="cg-review-perfect">🏆 全对！PERFECT<br>每个词都在多种考法下答对</div>`
+        : (groups.length === 0 ? `<div class="cg-review-perfect">${win ? '🏆 通关！' : '💥 血量耗尽'}</div>` : `<div class="cg-review-list">${body}</div>`);
+
       const view = el(`
         <div class="cg-screen cg-result">
-          <div class="cg-result-hero">
-            <div class="cg-result-en ${enClass}">${enText}</div>
-            <div class="cg-result-zh">${zhText}</div>
-            <div class="cg-result-stat">掌握 <b>${mastered}/${total}</b> 词 · 答题 <b>${answered}</b> · 答对 <b>${correct}</b> · 正确率 <b>${acc}%</b> · 连击 <b>x${maxCombo}</b></div>
+          <div class="cg-result-head">
+            <div class="cg-result-title ${titleClass}">${titleText}</div>
+            <div class="cg-result-sub">${subText}</div>
           </div>
-          ${body}
+          <div class="cg-stats">
+            <div class="cg-stat"><div class="lbl">SCORE</div><div class="val score">${score}</div></div>
+            <div class="cg-stat"><div class="lbl">MAX COMBO</div><div class="val combo">×${maxCombo}</div></div>
+            <div class="cg-stat"><div class="lbl">掌握</div><div class="val mastery">${mastered}/${total}</div></div>
+          </div>
+          <div class="cg-review-box">
+            <div class="cg-review-label">错题复盘 · ${groups.length} 题</div>
+            ${reviewInner}
+          </div>
           <div class="cg-result-actions">
-            ${hasWrongs ? '<button class="cg-btn" data-ref="redo">重练错词 🔁</button>' : ''}
-            <div class="cg-mini-row">
-              <button class="cg-btn ${hasWrongs ? 'ghost' : ''}" data-ref="again">${win ? '再来一轮 ⚔' : '整关重来 ⚔'}</button>
-              <button class="cg-btn ghost" data-ref="board">🏆 排行榜</button>
-              <button class="cg-btn ghost" data-ref="menu">返回选关</button>
-            </div>
+            ${hasWrongs ? '<button class="cg-btn-redo" data-ref="redo">重练错词 ↻</button>' : ''}
+            <button class="cg-btn-again" data-ref="again">${win ? '再来一轮 ▶' : '整关重来 ▶'}</button>
+            <button class="cg-btn-neutral" data-ref="board">排行榜 🏆</button>
+            <button class="cg-btn-neutral" data-ref="menu">返回选关</button>
           </div>
         </div>`);
       this.root.appendChild(view);
+      view.querySelectorAll('[data-speak]').forEach(b => b.addEventListener('click', () => { SFX.click(); speak(b.dataset.speak); }));
 
       const redo = view.querySelector('[data-ref="redo"]');
       if (redo) redo.addEventListener('click', () => {
@@ -615,76 +649,119 @@
 
     _buildDOM() {
       const b = this.boss;
+      const lv = 20;
+      const bossImgHtml = b.img
+        ? `<img class="cg-sprite-img" data-ref="bossSprite" src="${esc(b.img)}" alt="" onerror="this.style.display='none'">` : '';
       this.stage = el(`
         <div class="cg-screen cg-battle">
-            <div class="cg-spritelayer" aria-hidden="true">
-              ${b.img ? `<img class="cg-sprite cg-sprite-boss" data-ref="bossSprite" src="${esc(b.img)}" alt="" onerror="this.style.display='none'">` : ''}
-              <img class="cg-sprite cg-sprite-hero" data-ref="heroSprite" src="${esc(HERO_IMG)}" alt="" onerror="this.style.display='none'">
-            </div>
-            <div class="cg-topbar">
-              <button class="cg-back" data-ref="exit" title="退出">✕</button>
-              <div class="cg-topbar-title">${esc(b.name)}<small>${esc(b.sub || '')}</small></div>
-              <div class="cg-count" data-ref="count"></div>
-            </div>
+            <!-- 静态网格层(不动) -->
+            <div class="cg-grid" aria-hidden="true"></div>
 
-            <div class="cg-battle-body">
-              <!-- 左栏(桌面) / 上半(手机): HUD + 当前词 -->
-              <div class="cg-pane-left">
-                <div class="cg-master">
-                  <div class="cg-master-bar"><div class="cg-master-fill" data-ref="masterFill"></div></div>
-                  <div class="cg-master-text" data-ref="masterText"></div>
-                </div>
+            <button class="cg-exit" data-ref="exit" title="退出">✕</button>
 
-                <div class="cg-hud">
-                  <div class="cg-hprow">
-                    <div class="cg-face foe">${b.img ? `<img src="${esc(b.img)}" alt="" onerror="this.parentNode.textContent='${esc(b.face || '◈')}'">` : esc(b.face || '◈')}</div>
-                    <div class="cg-hpmeta">
-                      <div class="cg-hpname"><span>${esc(b.name)}<span class="foe-tag">ENRAGED</span></span><small data-ref="bossHpText"></small></div>
-                      <div class="cg-bar foe"><div class="cg-ghost" data-ref="bossGhost"></div><div class="cg-fill foe" data-ref="bossFill"></div></div>
-                    </div>
+            <!-- Shake 层: 只含立绘/HUD/COMBO/pops; 背景永不移动 -->
+            <div class="cg-shakelayer" data-ref="shake" aria-hidden="false">
+
+              <!-- HUD A: Boss plate 左上 -->
+              <div class="cg-boss-plate" data-ref="bossPlate">
+                <div class="inner">
+                  <div class="cg-plate-hd"><span class="cg-plate-name" data-ref="bossName2">${esc(b.name)}</span><span class="cg-plate-lv">Lv${lv}</span></div>
+                  <div class="cg-hp-row"><span class="cg-hp-tag boss">HP</span>
+                    <div class="cg-bar"><div class="fill" data-ref="bossFill"></div><div class="ticks"></div></div>
                   </div>
-                  <div class="cg-hprow">
-                    <div class="cg-face hero">&gt;_</div>
-                    <div class="cg-hpmeta">
-                      <div class="cg-hpname"><span>YOU 你</span><small data-ref="heroHpText"></small></div>
-                      <div class="cg-bar hero"><div class="cg-ghost" data-ref="heroGhost"></div><div class="cg-fill hero" data-ref="heroFill"></div></div>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="cg-statusbar">
-                  <div class="cg-round" data-ref="round"></div>
-                  <div class="cg-combo-pill" data-ref="combo">🔥 <span data-ref="comboNum">x0</span> COMBO</div>
-                  <div class="cg-timer">
-                    <span class="cg-timer-num" data-ref="timerNum">${this.timerSeconds}</span>
-                    <button class="cg-timer-toggle" data-ref="timerToggle" title="开关计时">⏱</button>
-                  </div>
-                </div>
-
-                <div class="cg-energy">
-                  <div class="cg-energy-track" data-ref="energyTrack"><div class="cg-energy-fill" data-ref="energyFill"></div><div class="cg-energy-text" data-ref="energyText">0%</div></div>
-                  <span class="cg-ult-badge" data-ref="ultBadge">⚡ 满即自动词爆</span>
-                </div>
-
-                <div class="cg-q">
-                  <div class="cg-q-dir" data-ref="qdir"></div>
-                  <div class="cg-q-big" data-ref="qbig"></div>
+                  <div class="cg-hp-num boss" data-ref="bossHpText"></div>
                 </div>
               </div>
 
-              <!-- 右栏(桌面) / 下半(手机): 2×2 选项 -->
-              <div class="cg-pane-right">
-                <div class="cg-opts" data-ref="opts"></div>
-                <div class="cg-keyhint">桌面按 <b>Q W</b> / <b>A S</b> 对应四个选项</div>
+              <!-- HUD A: TRAINER plate 右下 -->
+              <div class="cg-hero-plate" data-ref="heroPlate">
+                <div class="inner">
+                  <div class="cg-plate-hd"><span class="cg-plate-name" data-ref="heroName">${esc(Board.name() || 'TRAINER')}</span><span class="cg-plate-lv">Lv${lv}</span></div>
+                  <div class="cg-hp-row"><span class="cg-hp-tag hero">HP</span>
+                    <div class="cg-bar"><div class="fill hero" data-ref="heroFill"></div><div class="ticks"></div></div>
+                  </div>
+                  <div class="cg-hp-num hero" data-ref="heroHpText"></div>
+                  <div class="cg-thin-row"><span class="cg-thin-label mastery">掌握</span><div class="cg-thin-bar"><div class="fill mastery" data-ref="masterFill"></div></div><span class="cg-thin-num" data-ref="masterText"></span></div>
+                  <div class="cg-thin-row"><span class="cg-thin-label energy">词爆</span><div class="cg-thin-bar"><div class="fill energy" data-ref="energyFill"></div></div></div>
+                </div>
               </div>
+
+              <!-- HUD B: 顶栏(手机) -->
+              <div class="cg-hud-b" data-ref="hudB">
+                <div class="cell hero">
+                  <div class="cell-hd"><span class="cell-name">${esc(Board.name() || 'TRAINER')}</span><span class="cell-hp" data-ref="heroHpTextB"></span></div>
+                  <div class="cg-bar"><div class="fill hero" data-ref="heroFillB"></div><div class="ticks"></div></div>
+                  <div class="cell-mastery"><span data-ref="masterTextB"></span><div class="cg-thin-bar"><div class="fill mastery" data-ref="masterFillB"></div></div></div>
+                </div>
+                <div class="cell center">
+                  <span class="time" data-ref="timeB">∞</span>
+                  <div class="center-energy"><div class="lbl">词爆</div><div class="cg-thin-bar"><div class="fill energy" data-ref="energyFillB"></div></div></div>
+                </div>
+                <div class="cell boss">
+                  <div class="cell-hd"><span class="cell-name">${esc(b.name)}</span><span class="cell-hp" data-ref="bossHpTextB"></span></div>
+                  <div class="cg-bar"><div class="fill" data-ref="bossFillB"></div><div class="ticks"></div></div>
+                </div>
+              </div>
+
+              <!-- Boss 立绘 右上 -->
+              <div class="cg-sprite-wrap boss">
+                <div class="cg-sprite-anim boss" data-ref="bossSprite">
+                  <div class="cg-sprite-shadow"></div>
+                  <div class="cg-sprite-inner">
+                    <div class="cg-sprite-ph">BOSS<br>${esc(b.img ? b.img.replace(/.*\//, '').replace('.png', '') : 'boss')}</div>
+                    ${bossImgHtml}
+                    <div class="cg-sprite-flash"></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Hero 立绘 左下 -->
+              <div class="cg-sprite-wrap hero">
+                <div class="cg-sprite-anim hero" data-ref="heroSprite">
+                  <div class="cg-sprite-shadow"></div>
+                  <div class="cg-sprite-inner">
+                    <div class="cg-sprite-ph">HERO<br>hero_back</div>
+                    <img class="cg-sprite-img" src="${esc(HERO_IMG)}" alt="" onerror="this.style.display='none'">
+                    <div class="cg-sprite-flash"></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- COMBO 徽章 -->
+              <div class="cg-combo" data-ref="combo"><div class="lbl">COMBO</div><div class="num" data-ref="comboNum">×0</div></div>
+
+              <!-- CUT-IN 词爆 (前景) -->
+              <div class="cg-cutin" data-ref="cutin">
+                <div class="flash"></div>
+                <div class="cut-hero"><img src="${esc(HERO_IMG)}" alt="" onerror="this.style.display='none'"></div>
+                <div class="cut-text"><div class="fin">FINISHER</div><div class="zh">词&nbsp;爆</div><div class="num">-50</div></div>
+              </div>
+            </div>
+
+            <!-- 答题区(下半, 固定高, 永远可见) -->
+            <div class="cg-qpanel">
+              <div class="cg-qhead">
+                <span class="cg-qbadge" data-ref="qbadge">Q1</span>
+                <span class="cg-qdir" data-ref="qdir"></span>
+                <button class="cg-burst-btn" data-ref="ultBadge">⚡词爆 READY</button>
+              </div>
+              <div class="cg-qcard">
+                <div class="big" data-ref="qbig"></div>
+                <div class="sub" data-ref="qsub"></div>
+              </div>
+              <div class="cg-opts" data-ref="opts"></div>
+            </div>
+
+            <!-- 隐藏保留旧钩子(逻辑仍读写, 不显示) -->
+            <div class="cg-hidden">
+              <span data-ref="round"></span><span data-ref="count"></span>
+              <span data-ref="timerNum">${this.timerSeconds}</span><button data-ref="timerToggle"></button>
+              <span data-ref="energyText"></span><div data-ref="energyTrack"></div>
+              <div data-ref="bossGhost"></div><div data-ref="heroGhost"></div>
             </div>
 
             <div class="cg-fxlayer" data-ref="fx"></div>
             <div class="cg-flashwhite" data-ref="flash"></div>
-
-            <div class="cg-cutin" data-ref="cutin">
-              <div class="cg-cutin-body"><div class="cg-cutin-en">WORD BURST</div><div class="cg-cutin-zh"><span>词</span><span>爆</span></div></div>
-            </div>
         </div>`);
 
       this.ref = {};
@@ -692,14 +769,14 @@
       this.mount.appendChild(this.stage);
 
       this.ref.exit.addEventListener('click', () => { SFX.click(); this.onExit(); });
-      this.ref.timerToggle.addEventListener('click', () => this._toggleTimer());
+      if (this.ref.timerToggle) this.ref.timerToggle.addEventListener('click', () => this._toggleTimer());
     }
 
     _toggleTimer() {
       this.timerOn = !this.timerOn;
-      this.ref.timerToggle.classList.toggle('off', !this.timerOn);
+      if (this.ref.timerToggle) this.ref.timerToggle.classList.toggle('off', !this.timerOn);
       if (this.timerOn) { this.timeLeft = this.timerSeconds; this._renderTimer(); if (!this.locked) this._startTimer(); }
-      else { this._stopTimer(); this.ref.timerNum.textContent = '∞'; this.ref.timerNum.className = 'cg-timer-num'; }
+      else { this._stopTimer(); this._renderTimer(); }
     }
 
     // 选下一个"未掌握"的词, 并挑一种它还没答对过的考法(优先没考过的形式, 逼学生多角度理解)
@@ -734,17 +811,22 @@
       this.answered = false; this.selectedSlot = null; this.timeLeft = this.timerSeconds; this.locked = false;
 
       this.roundNo++;
-      const mastered = this._masteredCount();
       // 该词掌握进度: 已答对考法数 / 需要的门槛
       const wp = state.passed.size;
-      const formTag = { term2cn: '英→中', cn2term: '中→英', cloze: '例句填空' }[this.curQ.form] || '';
-      this.ref.round.innerHTML = `第 <b>${this.roundNo}</b> 题 · <span class="cg-formtag">${formTag}</span>`;
-      this.ref.count.textContent = `掌握 ${mastered}/${this.total}`;
-      this.ref.qdir.textContent = this.curQ.dirLabel + `　(本词 ${wp}/${this.needPerWord} 种考法已过)`;
+      // Q# 徽章 + 方向标签(设计: Q1 + "看中文，选出对应英文术语")
+      if (this.ref.qbadge) this.ref.qbadge.textContent = 'Q' + this.roundNo;
+      if (this.ref.qdir) this.ref.qdir.textContent = this.curQ.dirLabel + `　(本词 ${wp}/${this.needPerWord} 种考法已过)`;
+      // 大题卡: 中文/英文/填空 三态字体
       this.ref.qbig.textContent = this.curQ.big;
-      const bigLen = this.curQ.big.length;
-      this.ref.qbig.className = 'cg-q-big ' + this.curQ.bigClass +
-        (this.curQ.kind === 'cloze' ? ' cloze' : (bigLen > 22 ? ' sm' : ''));
+      this.ref.qbig.className = 'big ' + (this.curQ.kind === 'cloze' ? 'cloze' : this.curQ.bigClass);
+      // 副行(sub): 英中对照题给出该词的中文详细解释帮助理解; 填空题不显示
+      if (this.ref.qsub) {
+        const w = this.curQ.word;
+        let sub = '';
+        if (this.curQ.kind !== 'cloze') sub = (this.curQ.bigClass === 'cn') ? (w.definition || '') : (cnDefOf(w) || '');
+        this.ref.qsub.textContent = sub;
+        this.ref.qsub.style.display = sub ? '' : 'none';
+      }
       this._renderProgress();
       this._renderOptions();
       this._renderTimer();
@@ -752,22 +834,25 @@
     }
 
     _renderProgress() {
-      // 顶部掌握进度条
-      if (!this.ref.masterFill) return;
-      const p = this._masteredCount() / this.total * 100;
-      this.ref.masterFill.style.width = p + '%';
-      this.ref.masterText.textContent = `掌握 ${this._masteredCount()} / ${this.total}`;
+      const m = this._masteredCount();
+      const p = m / this.total * 100;
+      if (this.ref.masterFill) this.ref.masterFill.style.width = p + '%';
+      if (this.ref.masterText) this.ref.masterText.textContent = `${m}/${this.total}`;
+      if (this.ref.masterFillB) this.ref.masterFillB.style.width = p + '%';
+      if (this.ref.masterTextB) this.ref.masterTextB.textContent = `掌握 ${m}/${this.total}`;
     }
 
     _renderOptions() {
       const keys = ['Q', 'W', 'A', 'S']; const box = this.ref.opts; box.innerHTML = '';
       this.curQ.options.forEach((label, slot) => {
         const long = String(label).length > 10;
-        const btn = el(`<button class="cg-opt ${long ? 'long' : ''}" type="button"><span class="cg-chip">${keys[slot]}</span><span class="cg-opt-label">${esc(label)}</span></button>`);
+        let mark = '';
+        const btn = el(`<button class="cg-opt ${long ? 'long' : ''}" type="button"><span class="keycap">${keys[slot]}</span><span class="label">${esc(label)}</span><span class="mark"></span></button>`);
         if (this.answered) {
-          if (slot === this.correctIdx) btn.classList.add('correct');
-          else if (slot === this.selectedSlot) btn.classList.add('wrong');
+          if (slot === this.correctIdx) { btn.classList.add('correct'); mark = '✓'; }
+          else if (slot === this.selectedSlot) { btn.classList.add('wrong'); mark = '✗'; }
           else btn.classList.add('dim');
+          btn.querySelector('.mark').textContent = mark;
           btn.disabled = true;
         } else btn.addEventListener('click', () => this.choose(slot));
         box.appendChild(btn);
@@ -943,31 +1028,39 @@
     }
 
     /* ---------- 渲染 ---------- */
+    // HP 颜色按血量百分比 (设计规格: >60 绿 / 30-60 黄 / <30 红)
+    _hpColor(p) { return p > 60 ? '#34d399' : p > 30 ? '#fbbf24' : '#ef4444'; }
     _renderBars() {
       const bp = Math.max(0, this.bossHP / this.bossMax * 100);
       const hp = Math.max(0, this.heroHP / this.heroMax * 100);
       const ep = Math.max(0, Math.min(100, this.energy)), ready = ep >= 100;
-      this.ref.bossFill.style.width = bp + '%'; this.ref.bossGhost.style.width = bp + '%';
-      this.ref.bossHpText.textContent = `${Math.ceil(this.bossHP)}/${this.bossMax}`;
-      this.ref.heroFill.style.width = hp + '%'; this.ref.heroGhost.style.width = hp + '%';
-      this.ref.heroHpText.textContent = `${Math.ceil(this.heroHP)}/${this.heroMax}`;
-      // 血量偏低警示
-      this.ref.heroFill.classList.toggle('low', this.heroHP / this.heroMax <= 0.3);
-      this.ref.energyFill.style.width = ep + '%';
-      this.ref.energyText.textContent = ready ? '词爆!' : Math.round(ep) + '%';
-      this.ref.energyTrack.classList.toggle('ready', ready);
-      this.ref.ultBadge.classList.toggle('ready', ready);
+      const bpTxt = `${Math.ceil(this.bossHP / this.bossMax * 100)} / 100`;
+      const hpTxt = `${Math.ceil(this.heroHP / this.heroMax * 100)} / 100`;
+      // Boss HP
+      if (this.ref.bossFill) { this.ref.bossFill.style.width = bp + '%'; this.ref.bossFill.style.background = this._hpColor(bp); }
+      if (this.ref.bossHpText) this.ref.bossHpText.textContent = bpTxt;
+      if (this.ref.bossFillB) { this.ref.bossFillB.style.width = bp + '%'; this.ref.bossFillB.style.background = this._hpColor(bp); }
+      if (this.ref.bossHpTextB) this.ref.bossHpTextB.textContent = 'HP ' + Math.ceil(bp);
+      // Hero HP
+      if (this.ref.heroFill) { this.ref.heroFill.style.width = hp + '%'; this.ref.heroFill.style.background = this._hpColor(hp); }
+      if (this.ref.heroHpText) this.ref.heroHpText.textContent = hpTxt;
+      if (this.ref.heroFillB) { this.ref.heroFillB.style.width = hp + '%'; this.ref.heroFillB.style.background = this._hpColor(hp); }
+      if (this.ref.heroHpTextB) this.ref.heroHpTextB.textContent = 'HP ' + Math.ceil(hp);
+      // 词爆能量
+      if (this.ref.energyFill) this.ref.energyFill.style.width = ep + '%';
+      if (this.ref.energyFillB) this.ref.energyFillB.style.width = ep + '%';
+      if (this.ref.ultBadge) this.ref.ultBadge.classList.toggle('ready', ready && !this.locked);
     }
     _renderTimer() {
-      if (!this.timerOn) { this.ref.timerNum.textContent = '∞'; this.ref.timerNum.className = 'cg-timer-num'; return; }
-      const n = Math.ceil(this.timeLeft);
-      this.ref.timerNum.textContent = n;
-      this.ref.timerNum.className = 'cg-timer-num' + (this.timeLeft <= 5 ? ' danger' : this.timeLeft <= 10 ? ' warn' : '');
+      const danger = this.timerOn && this.timeLeft <= 5;
+      const txt = this.timerOn ? String(Math.ceil(this.timeLeft)) : '∞';
+      if (this.ref.timeB) { this.ref.timeB.textContent = txt; this.ref.timeB.classList.toggle('danger', danger); }
+      if (this.ref.timerNum) this.ref.timerNum.textContent = txt;
     }
     _renderCombo() {
       const show = this.combo >= 2;
       this.ref.combo.classList.toggle('on', show);
-      this.ref.comboNum.textContent = 'x' + this.combo;
+      this.ref.comboNum.textContent = '×' + this.combo;
     }
     _showTaunt() {
       const arr = this.boss.taunts || ['你的知识还不够！'];
@@ -979,11 +1072,11 @@
     /* ---------- 特效 (相对整屏, 用比例定位以适配手机) ---------- */
     _anim(elm, a, ms) { if (!elm) return; elm.style.animation = 'none'; void elm.offsetWidth; elm.style.animation = a; this._after(() => { if (elm) elm.style.animation = ''; }, ms); }
     _rect() { return this.stage.getBoundingClientRect(); }
+    // 屏震: 只抖 shake 层(立绘/HUD), 背景永不移动; translate-only(不旋转/斜切)
     shake(level) {
-      const frame = this.stage; if (!frame) return;
-      const a = level >= 2 ? 'cg-shakeB .4s ease' : 'cg-shakeA .3s ease';
-      frame.style.animation = 'none'; void frame.offsetWidth; frame.style.animation = a;
-      this._after(() => { if (frame) frame.style.animation = ''; }, level >= 2 ? 420 : 320);
+      const layer = this.ref.shake; if (!layer) return;
+      layer.classList.remove('shaking'); void layer.offsetWidth; layer.classList.add('shaking');
+      this._after(() => { if (layer) layer.classList.remove('shaking'); }, 400);
     }
     // 立绘受击反应: Boss 挨打(答对) / 本体挨打(答错). 短暂加 .hit 触发抖动+闪白
     _spriteHit(who) {
