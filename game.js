@@ -361,7 +361,7 @@
         <div class="cg-screen cg-board">
           <div class="cg-board-head">
             <div class="cg-board-title">🏆 <span class="cn">排行榜</span></div>
-            <div class="cg-board-sub">${esc(topicName)} · 本周高分 ${me ? '' : '· 未设玩家名'}</div>
+            <div class="cg-board-sub">按完成度(已掌握词数/总词数)排名 ${me ? '· 你 ' + my.pct + '%' : '· 未设玩家名'}</div>
           </div>
           <div class="cg-board-list" data-ref="list"><div class="cg-board-empty">${Board.remoteOn() ? '加载共享榜中…' : ''}</div></div>
           <button class="cg-board-again" data-ref="back">再战一局 ▶</button>
@@ -375,22 +375,19 @@
         const map = new Map();
         for (const e of rows) if (e && e.name) map.set(e.name, e);
         if (me) map.set(me, { name: me, mastered: my.mastered, total: my.total, pct: my.pct, ts: Date.now() });
-        const ranked = Board.ranked(Array.from(map.values()));
-        // 分数展示 = 掌握词数 * 20(纯展示; 排序仍按完成度). 条宽 = 相对最高分
-        const withScore = ranked.map(e => ({ ...e, score: (e.mastered || 0) * 20 }));
-        const maxScore = Math.max(1, ...withScore.map(e => e.score));
-        listEl.innerHTML = withScore.length ? withScore.map((e, i) => {
+        const ranked = Board.ranked(Array.from(map.values()));   // 按完成度 pct 排
+        listEl.innerHTML = ranked.length ? ranked.map((e, i) => {
           const self = e.name === me ? ' me' : '';
           const rankCls = i === 0 ? ' top1' : i === 1 ? ' top2' : i === 2 ? ' top3' : '';
           const youTag = self ? '<span class="cg-bd-you">YOU</span>' : '';
-          const barPct = Math.round(e.score / maxScore * 100);
+          const pctv = e.pct != null ? e.pct : 0;
           return `<div class="cg-bd-row${rankCls}${self}">
             <div class="cg-bd-rank">${i + 1}</div>
             <div class="cg-bd-body">
               <div class="cg-bd-namerow"><span class="cg-bd-name">${esc(e.name)}</span>${youTag}</div>
-              <div class="cg-bd-bar"><div class="fill" style="width:${barPct}%"></div></div>
+              <div class="cg-bd-bar"><div class="fill" style="width:${pctv}%"></div></div>
             </div>
-            <div class="cg-bd-score">${e.score}</div>
+            <div class="cg-bd-score">${pctv}%<small>${e.mastered || 0}/${e.total || 0}</small></div>
           </div>`;
         }).join('') : '<div class="cg-board-empty">还没有记录。设置玩家名、打几局掌握单词就上榜啦。</div>';
         if (failed) listEl.insertAdjacentHTML('beforeend', '<div class="cg-board-empty">共享榜拉取失败(检查网络/配置)，暂显示本机榜。</div>');
@@ -615,9 +612,11 @@
       this.needPerWord = Math.min(MASTER_FORMS_NEEDED, /* 保证可达: 最少考法数 */
         Math.min.apply(null, this.wordState.map(s => s.forms.length)));
 
-      // Boss 血量按"总需答对次数"标定, 掌握全部≈击碎 Boss
+      // 命中制: Boss 血 = 剩余"需答对次数" × 10。每答对砍 10(可见一块), 大招清整词=一次砍多块,
+      // 全部掌握时血恰好归零。伤害数字与血条严格对应, 不再脱节。
       this.targetHits = this.wordState.reduce((a, s) => a + this.needPerWord, 0);
-      this.bossMax = Math.max(60, this.targetHits * 20);
+      this.HIT_HP = 10;
+      this.bossMax = this.targetHits * this.HIT_HP;
       this.bossHP = this.bossMax;
       // 玩家血条(调平数值): 满血 100, 答错扣 ~13, 需 6~8 次才见底, 一次绝不致死
       this.heroMax = 100; this.heroHP = this.heroMax;
@@ -643,6 +642,8 @@
     }
 
     _masteredCount() { return this.wordState.filter(s => s.passed.size >= this.needPerWord).length; }
+    // 剩余"需答对次数"(每词还差几种考法没过, 累加) —— Boss 血就按它算
+    _remainingHits() { return this.wordState.reduce((a, s) => a + Math.max(0, this.needPerWord - Math.min(s.passed.size, this.needPerWord)), 0); }
     _allMastered() { return this._masteredCount() >= this.total; }
 
     _after(fn, ms) { const id = setTimeout(() => { this._timeouts.delete(id); if (!this._destroyed) fn(); }, ms); this._timeouts.add(id); return id; }
@@ -912,7 +913,7 @@
 
     _resolveCorrect() {
       const crit = Math.random() < 0.22;
-      const dmg = (crit ? 30 : 15) + Math.floor(this.combo * 0.9);
+      const dmg = this.HIT_HP;   // 答对固定砍 10(与血条一致); 连击的回报是攒能量放大招, 不是叠伤害
       SFX[crit ? 'crit' : 'hit']();
       this._after(() => {
         // Boss 血量由"掌握进度"决定(在 _afterTurn 收口), 这里只做打击特效
@@ -980,19 +981,18 @@
       }, 1520);
     }
 
-    // 词爆结算: 选一个"离掌握最近"的未掌握词, 把它剩余考法一次补满(真实推进掌握 = 真实 Boss 伤害)
+    // 词爆结算: 选一个"最生"(已过考法最少)的未掌握词, 一次补满掌握 → 跳过它剩下的题, 砍掉多块血。
+    // 这就是连击的价值: 连对攒满能量放大招, 相当于少做几道题。
     _burstMaster() {
       const before = this.bossHP;
       const un = this.wordState.filter(s => s.passed.size < this.needPerWord);
       if (un.length) {
-        // 优先补那些已过 1 种考法的(离掌握最近), 让词爆更"值"
-        un.sort((a, b) => b.passed.size - a.passed.size);
+        un.sort((a, b) => a.passed.size - b.passed.size);   // 最生的优先(跳过的题最多)
         const s = un[0];
         for (const f of s.forms) { if (s.passed.size >= this.needPerWord) break; s.passed.add(f); }
       }
-      const remain = this.total - this._masteredCount();
-      this.bossHP = this.bossMax * (remain / this.total);
-      return { dmg: Math.max(1, Math.round(before - this.bossHP)) };
+      this.bossHP = this._remainingHits() * this.HIT_HP;
+      return { dmg: Math.max(this.HIT_HP, Math.round(before - this.bossHP)) };
     }
 
     _afterTurn() {
@@ -1002,9 +1002,8 @@
         this.stage.classList.add('enraged');
         this.flash('#ef4444', .3); this._showTaunt();
       }
-      // Boss 血量 = 未掌握比例: 掌握全部时恰好被击碎, 不会提前秒杀也不会打不死
-      const remain = this.total - this._masteredCount();
-      this.bossHP = this.bossMax * (remain / this.total);
+      // Boss 血 = 剩余命中数 × 10: 每答对掉 10, 全部掌握时恰好归零
+      this.bossHP = this._remainingHits() * this.HIT_HP;
       this._renderBars();
       this._next();
     }

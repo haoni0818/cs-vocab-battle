@@ -288,14 +288,14 @@ body.cg-body{
 .cg-sprite-wrap.boss .cg-sprite-shadow{background:radial-gradient(closest-side,rgba(168,85,247,.6),transparent);}
 .cg-sprite-wrap.hero .cg-sprite-shadow{background:radial-gradient(closest-side,rgba(79,70,229,.6),transparent);}
 .cg-sprite-inner{position:relative;width:100%;height:100%;}
+/* 已有透明真立绘, 去掉斜纹占位外框(否则显得挤/框死), 让立绘直接浮在战斗背景上 */
 .cg-sprite-ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-  font-family:var(--font-pixel);font-size:8px;line-height:1.9;text-align:center;border:3px solid #000;}
-.cg-sprite-wrap.boss .cg-sprite-ph{background:repeating-linear-gradient(45deg,#2a1540 0 10px,#3a1e58 10px 20px);box-shadow:0 0 0 3px var(--ring-boss);color:var(--purple-text);}
-.cg-sprite-wrap.hero .cg-sprite-ph{background:repeating-linear-gradient(45deg,#171a3d 0 10px,#1e2250 10px 20px);box-shadow:0 0 0 3px var(--ring);color:#6d72b8;}
+  font-size:0;color:transparent;border:none;background:transparent;}
+.cg-sprite-wrap.boss .cg-sprite-ph,.cg-sprite-wrap.hero .cg-sprite-ph{background:transparent;box-shadow:none;}
 .cg-sprite-img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;image-rendering:pixelated;}
 .cg-sprite-flash{position:absolute;inset:0;opacity:0;background:#fff;mix-blend-mode:screen;pointer-events:none;}
 .cg-sprite-anim.hit .cg-sprite-flash{animation:cg-flashOut .32s ease-out;}
-.cg-battle.enraged .cg-sprite-wrap.boss .cg-sprite-ph{box-shadow:0 0 0 3px var(--magenta-light);}
+.cg-battle.enraged .cg-sprite-wrap.boss .cg-sprite-img{filter:drop-shadow(0 0 10px rgba(224,57,138,.7)) saturate(1.15);}
 
 /* 退出按钮 */
 .cg-exit{position:absolute;top:14px;right:14px;z-index:30;width:38px;height:38px;border:3px solid #000;
