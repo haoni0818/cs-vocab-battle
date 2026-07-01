@@ -100,8 +100,30 @@
       if (i >= 0) arr[i] = entry; else arr.push(entry);
       this.save(arr); this._syncRemote(entry); return entry;
     },
-    ranked() { return this.load().slice().sort((a, b) => b.pct - a.pct || b.mastered - a.mastered || a.ts - b.ts); },
-    _syncRemote(/* entry */) { /* Firebase-ready: 配置后在此把 entry push 到 Realtime DB, 拉取合并成跨设备榜 */ },
+    ranked(arr) { return (arr || this.load()).slice().sort((a, b) => b.pct - a.pct || b.mastered - a.mastered || a.ts - b.ts); },
+
+    // ---- 共享榜(Firebase Realtime DB REST; 配了 CG_FIREBASE_DB 才启用) ----
+    remoteBase() {
+      let u = (window.CG_FIREBASE_DB || '').trim();
+      if (!u) return '';
+      return u.replace(/\/+$/, '');   // 去掉结尾斜杠
+    },
+    remoteOn() { return !!this.remoteBase(); },
+    _key(name) { return String(name).trim().replace(/[.#$\[\]\/]/g, '_').slice(0, 40) || 'anon'; },
+    _syncRemote(entry) {
+      const base = this.remoteBase(); if (!base || !entry) return;
+      // 按玩家名 upsert(同名覆盖), 存自己一条
+      fetch(base + '/leaderboard/' + encodeURIComponent(this._key(entry.name)) + '.json',
+        { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry) })
+        .catch(() => {});
+    },
+    fetchRemote() {
+      const base = this.remoteBase(); if (!base) return Promise.resolve(null);
+      return fetch(base + '/leaderboard.json', { cache: 'no-store' })
+        .then(r => r.ok ? r.json() : null)
+        .then(obj => obj ? Object.keys(obj).map(k => obj[k]).filter(e => e && e.name) : [])
+        .catch(() => null);   // null = 拉取失败, 调用方回退本地
+    },
   };
 
   /* ---------------- 工具 ---------------- */
@@ -296,18 +318,7 @@
     showBoard() {
       this._clear();
       const me = Board.name();
-      const rows = Board.ranked();
       const my = Board.myStats();
-      const list = rows.length ? rows.map((e, i) => {
-        const medal = ['🥇', '🥈', '🥉'][i] || `<span class="cg-bd-rank">${i + 1}</span>`;
-        const self = e.name === me ? ' me' : '';
-        return `<div class="cg-bd-row${self}">
-          <div class="cg-bd-pos">${medal}</div>
-          <div class="cg-bd-name">${esc(e.name)}${self ? ' <em>(你)</em>' : ''}</div>
-          <div class="cg-bd-bar"><div class="cg-bd-fill" style="width:${e.pct}%"></div></div>
-          <div class="cg-bd-pct">${e.pct}%<small>${e.mastered}/${e.total}</small></div>
-        </div>`;
-      }).join('') : '<div class="cg-bd-empty">还没有记录。设置玩家名、打几局掌握单词就上榜啦。</div>';
       const view = el(`
         <div class="cg-screen cg-board">
           <div class="cg-board-top">
@@ -316,11 +327,33 @@
             <span></span>
           </div>
           <div class="cg-board-sub">按 <b>已掌握词数 / 总词数</b> 排名${me ? ` · 你: ${esc(me)} ${my.pct}%` : ' · 未设玩家名'}</div>
-          <div class="cg-board-list">${list}</div>
-          <div class="cg-hint">目前是本机排行榜。要和同学跨设备比拼(Kahoot 式)，配一个 Firebase 就能开共享榜。</div>
+          <div class="cg-board-list" data-ref="list"><div class="cg-bd-empty">${Board.remoteOn() ? '加载共享榜中…' : ''}</div></div>
+          <div class="cg-hint" data-ref="hint">${Board.remoteOn() ? '全班共享榜(Firebase)。' : '目前是本机排行榜。要跨设备共享(Kahoot 式)，配一个 Firebase 即可。'}</div>
         </div>`);
       this.root.appendChild(view);
       view.querySelector('[data-ref="back"]').addEventListener('click', () => { SFX.click(); this.showMenu(); });
+      const listEl = view.querySelector('[data-ref="list"]');
+      const hintEl = view.querySelector('[data-ref="hint"]');
+
+      const render = (rows, failed) => {
+        // 并入自己(即使还没同步成功, 也保证自己在榜且是最新完成度)
+        const map = new Map();
+        for (const e of rows) if (e && e.name) map.set(e.name, e);
+        if (me) map.set(me, { name: me, mastered: my.mastered, total: my.total, pct: my.pct, ts: Date.now() });
+        const ranked = Board.ranked(Array.from(map.values()));
+        listEl.innerHTML = ranked.length ? ranked.map((e, i) => {
+          const medal = ['🥇', '🥈', '🥉'][i] || `<span class="cg-bd-rank">${i + 1}</span>`;
+          const self = e.name === me ? ' me' : '';
+          return `<div class="cg-bd-row${self}"><div class="cg-bd-pos">${medal}</div><div class="cg-bd-name">${esc(e.name)}${self ? ' <em>(你)</em>' : ''}</div><div class="cg-bd-bar"><div class="cg-bd-fill" style="width:${e.pct}%"></div></div><div class="cg-bd-pct">${e.pct}%<small>${e.mastered}/${e.total}</small></div></div>`;
+        }).join('') : '<div class="cg-bd-empty">还没有记录。设置玩家名、打几局掌握单词就上榜啦。</div>';
+        if (failed) hintEl.textContent = '共享榜拉取失败(检查网络/配置)，暂显示本机榜。';
+      };
+
+      if (Board.remoteOn()) {
+        Board.fetchRemote().then(rows => render(rows == null ? Board.load() : rows, rows == null));
+      } else {
+        render(Board.load(), false);
+      }
     },
 
     /* ---------------- 开一轮: 选词 → 学习 → 对战 ---------------- */
