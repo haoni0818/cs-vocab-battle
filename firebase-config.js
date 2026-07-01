@@ -10,4 +10,4 @@
 
    不填(留空)= 只用本机排行榜。这个 URL 是公开安全的(不是密码)。
    ============================================================ */
-window.CG_FIREBASE_DB = "";
+window.CG_FIREBASE_DB = "https://cs-vocab-default-rtdb.asia-southeast1.firebasedatabase.app";
