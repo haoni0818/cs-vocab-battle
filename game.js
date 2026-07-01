@@ -82,6 +82,19 @@
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   // 中文释义: cn 优先, 缺失时用英文 definition 兜底(不报错)
   const cnOf = (w) => (w && w.cn) ? w.cn : (w ? w.definition : '');
+  // 中文详细解释: cn_def 优先, 缺失时用 cn 兜底(另一 agent 正在补 cn_def, 没有也不报错)
+  const cnDefOf = (w) => (w && w.cn_def) ? w.cn_def : (w ? (w.cn || '') : '');
+
+  // 朗读英文术语(浏览器内置 TTS, 无需数据/联网基本可用)
+  function speak(text) {
+    try {
+      const synth = window.speechSynthesis; if (!synth) return;
+      synth.cancel();
+      const u = new SpeechSynthesisUtterance(String(text));
+      u.lang = 'en-US'; u.rate = 0.9;
+      synth.speak(u);
+    } catch (e) {}
+  }
 
   // 加权抽词: 依据掌握度权重, 无放回地抽 n 个不同的词
   function weightedPick(pool, n) {
@@ -277,17 +290,35 @@
         const w = roundWords[idx];
         ref.count.textContent = `${idx + 1} / ${total}`;
         ref.prog.style.width = ((idx + 1) / total * 100) + '%';
+        // 左栏(英文): 术语 + 🔊读音 + 英文定义 + 例句
+        const defHtml = w.definition ? `<div class="fc-def"><span class="lbl">DEFINITION</span>${esc(w.definition)}</div>` : '';
         const exHtml = w.example ? `<div class="fc-ex"><span class="lbl">EXAMPLE 例句</span>${esc(w.example)}</div>` : '';
-        const defHtml = w.definition ? `<div class="fc-def"><span class="lbl">DEFINITION 英文定义</span>${esc(w.definition)}</div>` : '';
+        // 右栏(中文): 中文术语/释义 cn + 中文解释 cn_def(兜底 cn)
+        const cnDef = cnDefOf(w);
+        const cnDefHtml = (cnDef && cnDef !== cnOf(w))
+          ? `<div class="fc-cndef"><span class="lbl">中文解释</span>${esc(cnDef)}</div>`
+          : `<div class="fc-cndef"><span class="lbl">中文解释</span>${esc(cnDef || cnOf(w))}</div>`;
         const card = el(`
           <div class="cg-flash">
-            <div class="fc-tag">${esc(w.topic || 'CS')} · ${esc(w.level)}</div>
-            <div class="fc-term">${esc(w.term)}</div>
-            <div class="fc-cn">${esc(cnOf(w))}</div>
-            ${defHtml}
-            ${exHtml}
+            <div class="cg-fc-col en">
+              <div class="fc-colhd">EN · 英文</div>
+              <div class="fc-termrow">
+                <div class="fc-term">${esc(w.term)}</div>
+                <button class="fc-speak" data-ref="speak" type="button" title="朗读">🔊</button>
+              </div>
+              <div class="fc-tag">${esc(w.topic || 'CS')} · ${esc(w.level)}</div>
+              ${defHtml}
+              ${exHtml}
+            </div>
+            <div class="cg-fc-col zh">
+              <div class="fc-colhd">中文</div>
+              <div class="fc-cn">${esc(cnOf(w))}</div>
+              ${cnDefHtml}
+            </div>
           </div>`);
         ref.wrap.innerHTML = ''; ref.wrap.appendChild(card);
+        const sp = card.querySelector('[data-ref="speak"]');
+        if (sp) sp.addEventListener('click', () => { SFX.click(); speak(w.term); });
         ref.prev.disabled = false;
         ref.prev.style.visibility = idx === 0 ? 'hidden' : 'visible';
         ref.next.textContent = idx === total - 1 ? '开始对战 ⚔' : '下一张 ›';
@@ -430,7 +461,6 @@
       this.targetHits = this.wordState.reduce((a, s) => a + this.needPerWord, 0);
       this.bossMax = Math.max(60, this.targetHits * 20);
       this.bossHP = this.bossMax;
-      this.heroMax = 100; this.heroHP = this.heroMax;
       this.energy = 0; this.combo = 0; this.maxCombo = 0;
 
       this.timerOn = true;
@@ -466,49 +496,50 @@
               <div class="cg-count" data-ref="count"></div>
             </div>
 
-            <div class="cg-master">
-              <div class="cg-master-bar"><div class="cg-master-fill" data-ref="masterFill"></div></div>
-              <div class="cg-master-text" data-ref="masterText"></div>
-            </div>
+            <div class="cg-battle-body">
+              <!-- 左栏(桌面) / 上半(手机): HUD + 当前词 -->
+              <div class="cg-pane-left">
+                <div class="cg-master">
+                  <div class="cg-master-bar"><div class="cg-master-fill" data-ref="masterFill"></div></div>
+                  <div class="cg-master-text" data-ref="masterText"></div>
+                </div>
 
-            <div class="cg-hud">
-              <div class="cg-hprow">
-                <div class="cg-face hero">&gt;_</div>
-                <div class="cg-hpmeta">
-                  <div class="cg-hpname"><span>YOU</span><small data-ref="heroHpText"></small></div>
-                  <div class="cg-bar hero"><div class="cg-ghost" data-ref="heroGhost"></div><div class="cg-fill hero" data-ref="heroFill"></div></div>
+                <div class="cg-hud">
+                  <div class="cg-hprow">
+                    <div class="cg-face foe">${esc(b.face || '◈')}</div>
+                    <div class="cg-hpmeta">
+                      <div class="cg-hpname"><span>${esc(b.name)}<span class="foe-tag">ENRAGED</span></span><small data-ref="bossHpText"></small></div>
+                      <div class="cg-bar foe"><div class="cg-ghost" data-ref="bossGhost"></div><div class="cg-fill foe" data-ref="bossFill"></div></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="cg-statusbar">
+                  <div class="cg-round" data-ref="round"></div>
+                  <div class="cg-combo-pill" data-ref="combo">🔥 <span data-ref="comboNum">x0</span> COMBO</div>
+                  <div class="cg-timer">
+                    <span class="cg-timer-num" data-ref="timerNum">${this.timerSeconds}</span>
+                    <button class="cg-timer-toggle" data-ref="timerToggle" title="开关计时">⏱</button>
+                  </div>
+                </div>
+
+                <div class="cg-energy">
+                  <div class="cg-energy-track" data-ref="energyTrack"><div class="cg-energy-fill" data-ref="energyFill"></div><div class="cg-energy-text" data-ref="energyText">0%</div></div>
+                  <span class="cg-ult-badge" data-ref="ultBadge">⚡ 满即自动词爆</span>
+                </div>
+
+                <div class="cg-q">
+                  <div class="cg-q-dir" data-ref="qdir"></div>
+                  <div class="cg-q-big" data-ref="qbig"></div>
                 </div>
               </div>
-              <div class="cg-hprow">
-                <div class="cg-face foe">${esc(b.face || '◈')}</div>
-                <div class="cg-hpmeta">
-                  <div class="cg-hpname"><span>${esc(b.name)}<span class="foe-tag">ENRAGED</span></span><small data-ref="bossHpText"></small></div>
-                  <div class="cg-bar foe"><div class="cg-ghost" data-ref="bossGhost"></div><div class="cg-fill foe" data-ref="bossFill"></div></div>
-                </div>
+
+              <!-- 右栏(桌面) / 下半(手机): 2×2 选项 -->
+              <div class="cg-pane-right">
+                <div class="cg-opts" data-ref="opts"></div>
+                <div class="cg-keyhint">桌面按 <b>Q W</b> / <b>A S</b> 对应四个选项</div>
               </div>
             </div>
-
-            <div class="cg-statusbar">
-              <div class="cg-round" data-ref="round"></div>
-              <div class="cg-combo-pill" data-ref="combo">🔥 <span data-ref="comboNum">x0</span> COMBO</div>
-              <div class="cg-timer">
-                <span class="cg-timer-num" data-ref="timerNum">${this.timerSeconds}</span>
-                <button class="cg-timer-toggle" data-ref="timerToggle" title="开关计时">⏱</button>
-              </div>
-            </div>
-
-            <div class="cg-energy">
-              <div class="cg-energy-track" data-ref="energyTrack"><div class="cg-energy-fill" data-ref="energyFill"></div><div class="cg-energy-text" data-ref="energyText">0%</div></div>
-              <button class="cg-ult-btn" data-ref="ultBtn" type="button">⚡ 词爆</button>
-            </div>
-
-            <div class="cg-q">
-              <div class="cg-q-dir" data-ref="qdir"></div>
-              <div class="cg-q-big" data-ref="qbig"></div>
-            </div>
-
-            <div class="cg-opts" data-ref="opts"></div>
-            <div class="cg-keyhint">桌面按 <b>Q W</b> / <b>A S</b> 对应四个选项 · 空格放词爆</div>
 
             <div class="cg-fxlayer" data-ref="fx"></div>
             <div class="cg-flashwhite" data-ref="flash"></div>
@@ -523,7 +554,6 @@
       this.stage.querySelectorAll('[data-ref]').forEach(n => { this.ref[n.getAttribute('data-ref')] = n; });
       this.mount.appendChild(this.stage);
 
-      this.ref.ultBtn.addEventListener('click', () => this.ultimate());
       this.ref.exit.addEventListener('click', () => { SFX.click(); this.onExit(); });
       this.ref.timerToggle.addEventListener('click', () => this._toggleTimer());
     }
@@ -608,8 +638,8 @@
     _handleKey(e) {
       if (this._destroyed) return;
       const k = e.key.toUpperCase();
+      // 词爆能量满自动释放, 无需按键。只处理 Q W / A S 作答。
       if (['Q', 'W', 'A', 'S'].includes(k)) { const slot = ['Q', 'W', 'A', 'S'].indexOf(k); if (this.curQ && slot < this.curQ.options.length) this.choose(slot); }
-      else if (k === ' ' || e.key === 'Enter') { if (this.energy >= 100) { e.preventDefault(); this.ultimate(); } }
     }
 
     _startTimer() {
@@ -670,25 +700,30 @@
         this.dmgNum(0.72, 0.30, dmg, crit ? 'crit' : 'normal');
         this.shards(0.72, 0.30, crit ? 9 : 5);
       }, 150);
-      this._after(() => this._afterTurn(), crit ? 820 : 640);
+      // 能量满则自动放词爆(不需玩家按), 否则正常进入下一题
+      if (this.energy + (crit ? 34 : 26) >= 100) {
+        this._after(() => this.ultimate(true), crit ? 820 : 640);
+      } else {
+        this._after(() => this._afterTurn(), crit ? 820 : 640);
+      }
     }
 
     _resolveWrong() {
+      // 掌握制唯一结束条件是"全部掌握", 答错不掉血、不死亡, 只清连击 + 受击特效
       this.combo = 0; this._renderCombo();
-      const dmg = this.enraged ? 20 : 14;
       SFX.hurt();
       this._after(() => {
-        this.heroHP = Math.max(0, this.heroHP - dmg);
-        this._renderBars();
-        this.shake(2); this.flash('#ef4444', .34);
-        this.dmgNum(0.28, 0.30, dmg, 'player');
-      }, 150);
-      // 完成制: 答错也继续下一题(不结束)
-      this._after(() => this._afterTurn(), 760);
+        this.shake(2); this.flash('#ef4444', .3);
+        // 红色"MISS"提示(不再掉血飘数字)
+        this.missTag(0.5, 0.30);
+      }, 120);
+      this._after(() => this._afterTurn(), 640);
     }
 
-    ultimate() {
-      if (this.energy < 100 || this.locked || this.ultActive) return;
+    // auto=true: 由"答对且能量满"自动触发, 放完直接进下一题
+    ultimate(auto) {
+      if (this.energy < 100 || this.ultActive) return;
+      if (!auto && this.locked) return;   // 手动触发时若正在结算则忽略
       this._stopTimer(); this.locked = true; this.ultActive = true;
       this.ref.cutin.classList.add('show'); SFX.special();
       this._after(() => {
@@ -696,9 +731,16 @@
         this._renderBars(); this.flash('#ffffff', .72); this.shake(2);
         this.dmgNum(0.72, 0.30, dmg, 'ult'); this.shards(0.72, 0.30, 14);
       }, 1100);
-      this._after(() => { this.ref.cutin.classList.remove('show'); this.ultActive = false;
-        this.locked = false; // 词爆不推进题目, 回到当前题继续作答
-        if (this.timerOn) this._startTimer();
+      this._after(() => {
+        this.ref.cutin.classList.remove('show'); this.ultActive = false;
+        if (auto) {
+          // 自动词爆是在答对之后触发的, 放完继续推进题目
+          this._afterTurn();
+        } else {
+          // 手动触发(能量满但玩家在答题中点了): 回到当前题继续作答
+          this.locked = false;
+          if (this.timerOn) this._startTimer();
+        }
       }, 1620);
     }
 
@@ -733,16 +775,14 @@
 
     /* ---------- 渲染 ---------- */
     _renderBars() {
-      const bp = Math.max(0, this.bossHP / this.bossMax * 100), hp = Math.max(0, this.heroHP / this.heroMax * 100);
+      const bp = Math.max(0, this.bossHP / this.bossMax * 100);
       const ep = Math.max(0, Math.min(100, this.energy)), ready = ep >= 100;
       this.ref.bossFill.style.width = bp + '%'; this.ref.bossGhost.style.width = bp + '%';
-      this.ref.heroFill.style.width = hp + '%'; this.ref.heroGhost.style.width = hp + '%';
       this.ref.bossHpText.textContent = `${Math.ceil(this.bossHP)}/${this.bossMax}`;
-      this.ref.heroHpText.textContent = `${Math.ceil(this.heroHP)}/${this.heroMax}`;
       this.ref.energyFill.style.width = ep + '%';
-      this.ref.energyText.textContent = ready ? 'READY' : Math.round(ep) + '%';
+      this.ref.energyText.textContent = ready ? '词爆!' : Math.round(ep) + '%';
       this.ref.energyTrack.classList.toggle('ready', ready);
-      this.ref.ultBtn.classList.toggle('ready', ready);
+      this.ref.ultBadge.classList.toggle('ready', ready);
     }
     _renderTimer() {
       if (!this.timerOn) { this.ref.timerNum.textContent = '∞'; this.ref.timerNum.className = 'cg-timer-num'; return; }
@@ -775,6 +815,15 @@
       const f = this.ref.flash; if (!f) return;
       f.style.background = color; f.style.transition = 'none'; f.style.opacity = a; void f.offsetWidth;
       f.style.transition = 'opacity .32s ease'; f.style.opacity = '0';
+    }
+    // 答错提示: 红色 "MISS" 飘字(不掉血)
+    missTag(fx, fy) {
+      const layer = this.ref.fx; if (!layer) return;
+      const r = layer.getBoundingClientRect();
+      const x = r.width * fx, y = r.height * fy;
+      const d = document.createElement('div'); d.className = 'cg-dmg'; d.textContent = 'MISS';
+      d.style.cssText = `left:${x}px;top:${y}px;font-size:40px;color:#f87171;text-shadow:0 0 16px #ef4444,0 2px 4px rgba(0,0,0,.6);animation:cg-dmgFloat .9s ease-out forwards;`;
+      layer.appendChild(d); this._after(() => d.remove(), 1000);
     }
     dmgNum(fx, fy, amount, type) {
       const layer = this.ref.fx; if (!layer) return;
